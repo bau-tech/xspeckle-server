@@ -60,7 +60,9 @@
             >
               a supported file here.
             </span>
-            <span v-else>an IFC file.</span>
+            <span v-else>
+              an IFC, RVT, SketchUp or Rhino file.
+            </span>
           </p>
           <div v-if="showEmptyState && !isDisabled" :class="buttonsClasses">
             <FormButton :to="connectorsRoute" size="sm" color="outline">

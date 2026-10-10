@@ -1,8 +1,8 @@
 extend type Query {
-  comment(id: String!, streamId: String!): Comment
+  comment(id: String!, streamId: String!): Topic
     @hasScope(scope: "streams:read")
     @deprecated(
-      reason: "Part of the old API surface and will be removed in the future. Use Project.comment instead."
+      reason: "Part of the old API surface and will be removed in the future. Use Project.topic instead."
     )
 
   """
@@ -16,39 +16,44 @@ extend type Query {
     limit: Int = 25
     cursor: String
     archived: Boolean! = false
-  ): CommentCollection
+  ): TopicCollection
     @hasScope(scope: "streams:read")
-    @deprecated(reason: "Use Project/Version/Model 'commentThreads' fields instead")
+    @deprecated(reason: "Use Project/Version/Model 'topics' fields instead")
 }
 
 extend type Project {
   """
-  All comment threads in this project
+  All BCF topics in this project
   """
-  commentThreads(
+  topics(
     cursor: String
     limit: Int
-    filter: ProjectCommentsFilter
-  ): ProjectCommentCollection!
+    filter: ProjectTopicsFilter
+  ): ProjectTopicCollection!
 
   """
-  Get specific project comment/thread by ID
+  Get a specific project topic by ID
   """
-  comment(id: String!): Comment
+  topic(id: String!): Topic
+
+  """
+  Get a specific project topic by its BCF guid
+  """
+  topicByGuid(guid: String!): Topic
 }
 
 extend type Version {
   """
-  All comment threads in this version
+  All BCF topics in this version
   """
-  commentThreads(cursor: String, limit: Int! = 25): CommentCollection!
+  topics(cursor: String, limit: Int! = 25): TopicCollection!
 }
 
 extend type Model {
   """
-  All comment threads in this model
+  All BCF topics in this model
   """
-  commentThreads(cursor: String, limit: Int! = 25): CommentCollection!
+  topics(cursor: String, limit: Int! = 25): TopicCollection!
 }
 
 extend type Stream {
@@ -135,19 +140,319 @@ type LegacyCommentViewerData {
   filters: CommentDataFilters!
 }
 
-type Comment {
+type Vector3 {
+  x: Float!
+  y: Float!
+  z: Float!
+}
+
+input Vector3Input {
+  x: Float!
+  y: Float!
+  z: Float!
+}
+
+type ClippingPlane {
+  location: Vector3!
+  direction: Vector3!
+}
+
+input ClippingPlaneInput {
+  location: Vector3Input!
+  direction: Vector3Input!
+}
+
+type ComponentColoring {
+  ifcGuid: String!
+  color: String!
+}
+
+input ComponentColoringInput {
+  ifcGuid: String!
+  color: String!
+}
+
+"""
+BCF 3.0 perspective_camera / orthogonal_camera. fieldOfView is set for a
+perspective camera, viewToWorldScale for an orthogonal one.
+"""
+type BcfCamera {
+  cameraViewPoint: Vector3!
+  cameraDirection: Vector3!
+  cameraUpVector: Vector3!
+  fieldOfView: Float
+  viewToWorldScale: Float
+  aspectRatio: Float
+}
+
+input BcfCameraInput {
+  cameraViewPoint: Vector3Input!
+  cameraDirection: Vector3Input!
+  cameraUpVector: Vector3Input!
+  fieldOfView: Float
+  viewToWorldScale: Float
+  aspectRatio: Float
+}
+
+type BcfLine {
+  startPoint: Vector3!
+  endPoint: Vector3!
+}
+
+input BcfLineInput {
+  startPoint: Vector3Input!
+  endPoint: Vector3Input!
+}
+
+type BcfComponent {
+  ifcGuid: String
+  originatingSystem: String
+  authoringToolId: String
+}
+
+input BcfComponentInput {
+  ifcGuid: String
+  originatingSystem: String
+  authoringToolId: String
+}
+
+type BcfColoringGroup {
+  """
+  ARGB or RGB hex, as BCF specifies.
+  """
+  color: String!
+  components: [BcfComponent!]!
+}
+
+input BcfColoringGroupInput {
+  color: String!
+  components: [BcfComponentInput!]!
+}
+
+type BcfViewSetupHints {
+  spacesVisible: Boolean
+  spaceBoundariesVisible: Boolean
+  openingsVisible: Boolean
+}
+
+input BcfViewSetupHintsInput {
+  spacesVisible: Boolean
+  spaceBoundariesVisible: Boolean
+  openingsVisible: Boolean
+}
+
+type BcfVisibility {
+  defaultVisibility: Boolean!
+  exceptions: [BcfComponent!]!
+  viewSetupHints: BcfViewSetupHints
+}
+
+input BcfVisibilityInput {
+  defaultVisibility: Boolean
+  exceptions: [BcfComponentInput!]
+  viewSetupHints: BcfViewSetupHintsInput
+}
+
+type BcfComponents {
+  selection: [BcfComponent!]!
+  coloring: [BcfColoringGroup!]!
+  visibility: BcfVisibility!
+}
+
+input BcfComponentsInput {
+  selection: [BcfComponentInput!]
+  coloring: [BcfColoringGroupInput!]
+  visibility: BcfVisibilityInput
+}
+
+"""
+A BCF 3.0 Viewpoint of a Topic. Every viewpoint is its own record, in one
+list per topic (Topic.viewpoints); a Comment refers to one by guid.
+
+The nested fields (perspectiveCamera/orthogonalCamera, lines, components,
+snapshotType) are the BCF 3.0 viewpoint 1:1. The flat fields below them
+(isOrthogonal, cameraViewPoint, selection, coloring, ...) are the older,
+simplified view of the same data, kept for existing clients. `viewerState`
+is Speckle-only: the full 3D viewer state used to restore the exact view.
+"""
+type Viewpoint {
+  """
+  Speckle's own id for this viewpoint.
+  """
+  id: String
+  """
+  BCF guid.
+  """
+  guid: String!
+  index: Int
+  perspectiveCamera: BcfCamera
+  orthogonalCamera: BcfCamera
+  lines: [BcfLine!]!
+  components: BcfComponents!
+  """
+  'png' or 'jpg'; null when there's no snapshot.
+  """
+  snapshotType: String
+  isOrthogonal: Boolean!
+  cameraViewPoint: Vector3
+  cameraDirection: Vector3
+  cameraUpVector: Vector3
+  fieldOfView: Float
+  viewToWorldScale: Float
+  clippingPlanes: [ClippingPlane!]!
+  defaultVisibility: Boolean!
+  selection: [String!]!
+  visibilityExceptions: [String!]!
+  coloring: [ComponentColoring!]!
+  """
+  The snapshot image: a data URI or bare base64.
+  """
+  snapshot: String
+  """
+  The full underlying SerializedViewerState this viewpoint was captured
+  from -- unlike the narrower BCF-shaped fields above, this restores the
+  exact 3D view (pan/zoom/section box/etc.), the same way clicking an
+  existing comment does. Derived from the BCF fields when the viewpoint
+  wasn't captured in the Speckle viewer.
+  """
+  viewerState: JSONObject
+}
+
+"""
+A BCF viewpoint to store. Accepts the BCF 3.0 nested shape
+(perspectiveCamera/orthogonalCamera, lines, components) and the older flat
+fields; a nested field wins over its flat twin when both are given.
+"""
+input ViewpointInput {
+  """
+  Client-assigned BCF guid (BCF 3.0 allows it); generated when omitted.
+  """
+  guid: String
+  index: Int
+  perspectiveCamera: BcfCameraInput
+  orthogonalCamera: BcfCameraInput
+  lines: [BcfLineInput!]
+  components: BcfComponentsInput
+  """
+  'png' or 'jpg' -- the type of the accompanying screenshot. Defaults to 'png'.
+  """
+  snapshotType: String
+  isOrthogonal: Boolean
+  cameraViewPoint: Vector3Input
+  cameraDirection: Vector3Input
+  cameraUpVector: Vector3Input
+  fieldOfView: Float
+  viewToWorldScale: Float
+  clippingPlanes: [ClippingPlaneInput!]
+  defaultVisibility: Boolean
+  selection: [String!]
+  visibilityExceptions: [String!]
+  coloring: [ComponentColoringInput!]
+}
+
+type DocumentReference {
   id: String!
+  """
+  BCF guid.
+  """
+  guid: String!
+  documentGuid: String
+  url: String
+  description: String
+}
+
+input DocumentReferenceInput {
+  """
+  Client-assigned BCF guid; generated when omitted.
+  """
+  guid: String
+  documentGuid: String
+  url: String
+  description: String
+}
+
+"""
+BCF 3.0 bim_snippet.
+"""
+type BimSnippet {
+  snippetType: String!
+  isExternal: Boolean!
+  reference: String!
+  referenceSchema: String!
+}
+
+input BimSnippetInput {
+  snippetType: String!
+  isExternal: Boolean!
+  reference: String!
+  referenceSchema: String!
+}
+
+"""
+A BCF Topic -- the issue-tracking thread. Was previously called `Comment`;
+its individual remarks are the `Comment` type (see below), matching real BCF
+vocabulary where a Topic and its Comments are distinct concepts.
+"""
+type Topic {
+  id: String!
+  """
+  BCF guid -- the portable identity shared with other BCF servers.
+  """
+  guid: String!
   author: LimitedUser!
   authorId: String!
-  archived: Boolean!
-  screenshot: String
+  """
+  BCF creation_author: the creator's BCF identity (an email). Differs from
+  `author` when the topic was synced in from another BCF server.
+  """
+  creationAuthor: String
+  """
+  BCF creation_date (same value as createdAt).
+  """
+  creationDate: DateTime!
+  modifiedAuthor: String
+  modifiedDate: DateTime
+  referenceLinks: [String!]!
+  bimSnippet: BimSnippet
+  title: String
+  """
+  BCF topic description.
+  """
   text: SmartTextEditorValue
   """
-  Plain-text version of the comment text, ideal for previews
+  Plain-text version of the topic description, ideal for previews
   """
   rawText: String
+  topicType: String
+  topicStatus: String
+  priority: String
+  stage: String
+  labels: [String!]!
+  dueDate: DateTime
+  assignedTo: String
   """
-  Resources that this comment targets. Can be a mixture of either one stream, or multiple commits and objects.
+  BCF 3.0's per-project sequential topic number.
+  """
+  index: Int!
+  """
+  BCF 3.0's server_assigned_id -- the stringified `index`.
+  """
+  serverAssignedId: String!
+  relatedTopics: [Topic!]!
+  documentReferences: [DocumentReference!]!
+  """
+  The topic's first viewpoint (its creation-time view), if any.
+  """
+  viewpoint: Viewpoint
+    @deprecated(reason: "Use viewpoints -- this is just its first entry.")
+  """
+  All of this topic's BCF viewpoints, by index -- including the one it was
+  created with and the ones its comments refer to.
+  """
+  viewpoints: [Viewpoint!]!
+  screenshot: String
+  """
+  Resources that this topic targets. Can be a mixture of either one stream, or multiple commits and objects.
   """
   resources: [ResourceIdentifier!]!
   """
@@ -156,33 +461,64 @@ type Comment {
   viewerResources: [ViewerResourceItem!]!
   createdAt: DateTime!
   """
-  The time this comment was last updated. Corresponds also to the latest reply to this comment, if any.
+  The time this topic was last updated. Corresponds also to the latest comment on it, if any.
   """
   updatedAt: DateTime!
   """
-  The last time you viewed this comment. Present only if an auth'ed request. Relevant only if a top level commit.
+  The last time you viewed this topic. Present only if an auth'ed request.
   """
   viewedAt: DateTime
   """
-  Gets the replies to this comment.
+  Gets the comments on this topic.
   """
-  replies(limit: Int = 25, cursor: String): CommentCollection!
+  comments(limit: Int = 25, cursor: String): CommentCollection!
   """
-  Get authors of replies to this comment
+  Get authors of comments on this topic
   """
-  replyAuthors(limit: Int! = 25): CommentReplyAuthorCollection!
-  reactions: [String] @deprecated(reason: "Not actually implemented")
-  """
-  Whether or not comment is a reply to another comment
-  """
-  hasParent: Boolean!
-  """
-  Parent thread, if there's any
-  """
-  parent: Comment
+  commentAuthors(limit: Int! = 25): CommentAuthorCollection!
 }
 
-type CommentReplyAuthorCollection {
+"""
+An individual remark on a Topic -- BCF's Comment concept.
+"""
+type Comment {
+  id: String!
+  """
+  BCF guid.
+  """
+  guid: String!
+  author: LimitedUser!
+  authorId: String!
+  """
+  BCF author: the commenter's BCF identity (an email).
+  """
+  creationAuthor: String
+  """
+  BCF date (same value as createdAt).
+  """
+  creationDate: DateTime!
+  modifiedAuthor: String
+  modifiedDate: DateTime
+  """
+  BCF viewpoint_guid: the topic viewpoint this comment refers to.
+  """
+  viewpointGuid: String
+  comment: SmartTextEditorValue
+  """
+  Plain-text version of the comment, ideal for previews
+  """
+  rawComment: String
+  topicId: String!
+  topic: Topic!
+  """
+  The topic viewpoint this comment refers to (see viewpointGuid).
+  """
+  viewpoint: Viewpoint
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type CommentAuthorCollection {
   items: [LimitedUser!]!
   totalCount: Int!
 }
@@ -193,31 +529,31 @@ type CommentCollection {
   items: [Comment!]!
 }
 
-type ProjectCommentCollection {
+type TopicCollection {
   totalCount: Int!
-  totalArchivedCount: Int!
   cursor: String
-  items: [Comment!]!
+  items: [Topic!]!
 }
 
-input ProjectCommentsFilter {
+type ProjectTopicCollection {
+  totalCount: Int!
+  cursor: String
+  items: [Topic!]!
+}
+
+input ProjectTopicsFilter {
   """
-  Only request comments belonging to the resources identified by this
+  Only request topics belonging to the resources identified by this
   comma-delimited resouce string (same format that's used in the viewer URL)
   """
   resourceIdString: String
 
   """
   By default if resourceIdString is set, the "versionId" part of model resource identifiers will be ignored
-  and all comments of all versions of any of the referenced models will be returned. If `loadedVersionsOnly` is
-  enabled, then only comment threads of loaded/referenced versions in resourceIdString will be returned.
+  and all topics of all versions of any of the referenced models will be returned. If `loadedVersionsOnly` is
+  enabled, then only topics of loaded/referenced versions in resourceIdString will be returned.
   """
   loadedVersionsOnly: Boolean
-
-  """
-  Whether or not to include archived/resolved threads
-  """
-  includeArchived: Boolean
 }
 
 type ResourceIdentifier {
@@ -278,19 +614,82 @@ input CommentContentInput {
   blobIds: [String!]
 }
 
-input CreateCommentInput {
+input CreateTopicInput {
   projectId: String!
   content: CommentContentInput!
   """
-  SerializedViewerState. If omitted, comment won't render (correctly) inside the
-  viewer, but will still be retrievable through the API
+  Client-assigned BCF guid (BCF 3.0 allows it); generated when omitted.
+  Fails if another topic already has it.
+  """
+  guid: String
+  title: String
+  topicType: String
+  topicStatus: String
+  priority: String
+  stage: String
+  labels: [String!]
+  dueDate: DateTime
+  assignedTo: String
+  referenceLinks: [String!]
+  bimSnippet: BimSnippetInput
+  relatedTopicIds: [String!]
+  """
+  Same as relatedTopicIds, by BCF guid. Unknown guids are ignored.
+  """
+  relatedTopicGuids: [String!]
+  documentReferences: [DocumentReferenceInput!]
+  """
+  BCF sync overrides: stored as given instead of being derived from the
+  acting user and the current time, so a topic synced in from another BCF
+  server keeps its original author and dates.
+  """
+  creationAuthor: String
+  creationDate: DateTime
+  modifiedAuthor: String
+  modifiedDate: DateTime
+  """
+  BCF-shaped viewpoint. If omitted, falls back to `viewerState`. Stored as the
+  topic's first entry in Topic.viewpoints.
+  """
+  viewpoint: ViewpointInput
+  """
+  Full SerializedViewerState. If omitted, the topic won't render (correctly) inside the
+  viewer, but will still be retrievable through the API. Takes precedence over
+  `viewpoint` for fields present in both.
   """
   viewerState: JSONObject
   """
-  Resources that this comment should be attached to
+  Resources that this topic should be attached to
   """
   resourceIdString: String!
   screenshot: String
+}
+
+input CreateCommentInput {
+  projectId: String!
+  topicId: String!
+  content: CommentContentInput!
+  """
+  Client-assigned BCF guid; generated when omitted.
+  """
+  guid: String
+  """
+  An existing viewpoint of the topic to refer to (BCF viewpoint_guid).
+  """
+  viewpointGuid: String
+  """
+  A new viewpoint to add to the topic and refer to -- alternative to
+  viewpointGuid.
+  """
+  viewpoint: ViewpointInput
+  viewerState: JSONObject
+  """
+  BCF sync overrides -- see CreateTopicInput.
+  """
+  creationAuthor: String
+  creationDate: DateTime
+  modifiedAuthor: String
+  modifiedDate: DateTime
 }
 
 """
@@ -310,12 +709,6 @@ input ReplyCreateInput {
   data: JSONObject
 }
 
-input CreateCommentReplyInput {
-  content: CommentContentInput!
-  threadId: String!
-  projectId: String!
-}
-
 """
 Deprecated: Used by old stream-based mutations
 """
@@ -332,33 +725,143 @@ input CommentEditInput {
   blobIds: [String!]!
 }
 
-input EditCommentInput {
+input UpdateTopicInput {
+  topicId: String!
+  projectId: String!
+  content: CommentContentInput
+  title: String
+  topicType: String
+  topicStatus: String
+  priority: String
+  stage: String
+  labels: [String!]
+  dueDate: DateTime
+  assignedTo: String
+  referenceLinks: [String!]
+  """
+  Pass null to clear.
+  """
+  bimSnippet: BimSnippetInput
+  relatedTopicIds: [String!]
+  """
+  Same as relatedTopicIds, by BCF guid. Unknown guids are ignored.
+  """
+  relatedTopicGuids: [String!]
+  documentReferences: [DocumentReferenceInput!]
+  """
+  Re-keys the topic to a different BCF guid (used once, to align a topic
+  with its already-linked twin on another BCF server). Fails if taken.
+  """
+  guid: String
+  """
+  BCF sync overrides -- see CreateTopicInput.
+  """
+  modifiedAuthor: String
+  modifiedDate: DateTime
+}
+
+input UpdateCommentInput {
   commentId: String!
   projectId: String!
   content: CommentContentInput!
+  """
+  Re-points the comment at another viewpoint of its topic; null clears it.
+  """
+  viewpointGuid: String
+  """
+  Re-keys the comment to a different BCF guid (once, to align it with its
+  already-linked twin on another BCF server). Fails if taken.
+  """
+  guid: String
+  """
+  BCF sync overrides -- see CreateTopicInput.
+  """
+  modifiedAuthor: String
+  modifiedDate: DateTime
 }
 
-input MarkCommentViewedInput {
+input DeleteCommentInput {
   commentId: String!
   projectId: String!
 }
 
-input ArchiveCommentInput {
-  commentId: String!
+"""
+Re-keys a viewpoint to a different BCF guid -- once, to align it with its
+already-linked twin on another BCF server. Comments referring to it follow.
+"""
+input RekeyViewpointInput {
+  topicId: String!
   projectId: String!
-  archived: Boolean!
+  viewpointGuid: String!
+  newGuid: String!
 }
 
-type CommentMutations {
-  markViewed(input: MarkCommentViewedInput!): Boolean!
-  create(input: CreateCommentInput!): Comment!
-  reply(input: CreateCommentReplyInput!): Comment!
-  edit(input: EditCommentInput!): Comment!
-  archive(input: ArchiveCommentInput!): Boolean!
+input DeleteViewpointInput {
+  topicId: String!
+  projectId: String!
+  """
+  The viewpoint's BCF guid.
+  """
+  viewpointGuid: String!
+}
+
+input MarkTopicViewedInput {
+  topicId: String!
+  projectId: String!
+}
+
+input CreateViewpointInput {
+  topicId: String!
+  projectId: String!
+  """
+  BCF-shaped viewpoint. If omitted, falls back to `viewerState`.
+  """
+  viewpoint: ViewpointInput
+  """
+  Full SerializedViewerState. If omitted, falls back to `viewpoint`. Takes
+  precedence over `viewpoint` for fields present in both.
+  """
+  viewerState: JSONObject
+  screenshot: String
+}
+
+input DeleteTopicInput {
+  topicId: String!
+  projectId: String!
+}
+
+type TopicMutations {
+  markViewed(input: MarkTopicViewedInput!): Boolean!
+  create(input: CreateTopicInput!): Topic!
+  comment(input: CreateCommentInput!): Comment!
+  update(input: UpdateTopicInput!): Topic!
+  updateComment(input: UpdateCommentInput!): Comment!
+  """
+  Adds an independently-identified viewpoint to an existing topic, on top of
+  (not replacing) the topic's own single creation-time viewpoint -- lets a
+  topic accumulate more than one saved viewpoint over its lifetime.
+  """
+  createViewpoint(input: CreateViewpointInput!): Viewpoint!
+  """
+  Permanently deletes a topic and all of its comments/viewpoints. Unlike the
+  old commentMutations.archive (soft-hide), this is a real, irreversible
+  delete -- there is no archived concept left on Topic to soft-hide with.
+  """
+  delete(input: DeleteTopicInput!): Boolean!
+  """
+  Permanently deletes one comment of a topic (BCF comment DELETE).
+  """
+  deleteComment(input: DeleteCommentInput!): Boolean!
+  """
+  Permanently deletes one viewpoint of a topic (BCF viewpoint DELETE).
+  Comments that referred to it keep their text but lose the reference.
+  """
+  deleteViewpoint(input: DeleteViewpointInput!): Boolean!
+  rekeyViewpoint(input: RekeyViewpointInput!): Boolean!
 }
 
 extend type Mutation {
-  commentMutations: CommentMutations!
+  topicMutations: TopicMutations!
     @hasServerRole(role: SERVER_GUEST)
     @hasScope(scope: "streams:write")
 
@@ -392,7 +895,7 @@ extend type Mutation {
   commentCreate(input: CommentCreateInput!): String!
     @hasServerRole(role: SERVER_GUEST)
     @hasScope(scope: "streams:read")
-    @deprecated(reason: "Use commentMutations version")
+    @deprecated(reason: "Use topicMutations version")
 
   """
   Flags a comment as viewed by you (the logged in user).
@@ -400,19 +903,7 @@ extend type Mutation {
   commentView(streamId: String!, commentId: String!): Boolean!
     @hasServerRole(role: SERVER_GUEST)
     @hasScope(scope: "streams:read")
-    @deprecated(reason: "Use commentMutations version")
-
-  """
-  Archives a comment.
-  """
-  commentArchive(
-    streamId: String!
-    commentId: String!
-    archived: Boolean! = true
-  ): Boolean!
-    @hasServerRole(role: SERVER_GUEST)
-    @hasScope(scope: "streams:read")
-    @deprecated(reason: "Use commentMutations version")
+    @deprecated(reason: "Use topicMutations version")
 
   """
   Edits a comment.
@@ -420,7 +911,7 @@ extend type Mutation {
   commentEdit(input: CommentEditInput!): Boolean!
     @hasServerRole(role: SERVER_GUEST)
     @hasScope(scope: "streams:read")
-    @deprecated(reason: "Use commentMutations version")
+    @deprecated(reason: "Use topicMutations version")
 
   """
   Adds a reply to a comment.
@@ -428,12 +919,12 @@ extend type Mutation {
   commentReply(input: ReplyCreateInput!): String!
     @hasServerRole(role: SERVER_GUEST)
     @hasScope(scope: "streams:read")
-    @deprecated(reason: "Use commentMutations version")
+    @deprecated(reason: "Use topicMutations version")
 }
 
 type CommentActivityMessage {
   type: String!
-  comment: Comment!
+  comment: Topic!
 }
 
 type CommentThreadActivityMessage {
@@ -442,19 +933,23 @@ type CommentThreadActivityMessage {
   reply: Comment
 }
 
-enum ProjectCommentsUpdatedMessageType {
+enum ProjectTopicsUpdatedMessageType {
   CREATED
   UPDATED
-  ARCHIVED
 }
 
-type ProjectCommentsUpdatedMessage {
-  type: ProjectCommentsUpdatedMessageType!
+type ProjectTopicsUpdatedMessage {
+  type: ProjectTopicsUpdatedMessageType!
   id: String!
   """
   Null if deleted
   """
-  comment: Comment
+  topic: Topic
+  """
+  Set if this event is actually about a Comment (a reply) rather than the Topic
+  itself -- the id of the Topic the Comment belongs to.
+  """
+  parentTopicId: String
 }
 
 input ViewerUpdateTrackingTarget {
@@ -476,12 +971,12 @@ input ViewerUpdateTrackingTarget {
 
 extend type Subscription {
   """
-  Subscribe to updates to resource comments/threads. Optionally specify resource ID string to only receive
-  updates regarding comments for those resources.
+  Subscribe to updates to resource topics. Optionally specify resource ID string to only receive
+  updates regarding topics for those resources.
   """
   projectCommentsUpdated(
     target: ViewerUpdateTrackingTarget!
-  ): ProjectCommentsUpdatedMessage!
+  ): ProjectTopicsUpdatedMessage!
 
   """
   Broadcasts "real-time" location data for viewer users.
@@ -491,8 +986,8 @@ extend type Subscription {
 
   """
   Subscribe to new comment events. There's two ways to use this subscription:
-  - for a whole stream: do not pass in any resourceIds; this sub will get called whenever a comment (not reply) is added to any of the stream's resources.
-  - for a specific resource/set of resources: pass in a list of resourceIds (commit or object ids); this sub will get called when *any* of the resources provided get a comment.
+  - for a whole stream: do not pass in any resourceIds; this sub will get called whenever a topic (not comment) is added to any of the stream's resources.
+  - for a specific resource/set of resources: pass in a list of resourceIds (commit or object ids); this sub will get called when *any* of the resources provided get a topic.
   """
   commentActivity(streamId: String!, resourceIds: [String]): CommentActivityMessage!
     @hasServerRole(role: SERVER_GUEST)
@@ -500,9 +995,9 @@ extend type Subscription {
     @deprecated(reason: "Use projectCommentsUpdated")
 
   """
-  Subscribes to events on a specific comment. Use to find out when:
-  - a top level comment is deleted (trigger a deletion event outside)
-  - a top level comment receives a reply.
+  Subscribes to events on a specific topic. Use to find out when:
+  - a topic is deleted (trigger a deletion event outside)
+  - a topic receives a comment.
   """
   commentThreadActivity(
     streamId: String!

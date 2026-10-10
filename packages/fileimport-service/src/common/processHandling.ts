@@ -76,9 +76,20 @@ export function handleData(data: unknown, isErr: boolean, logger: Logger) {
   }
 }
 
+// Parsers flag lines that need attention -- e.g. elements an import could
+// not convert -- with this prefix; they are logged at WARN, not as progress.
+const WARNING_PREFIX = 'WARNING: '
+
 function wrapLogLine(line: string, isErr: boolean, logger: Logger) {
   if (isErr) {
     logger.error({ parserLogLine: line }, 'ParserLog: {parserLogLine}')
+    return
+  }
+  if (line.startsWith(WARNING_PREFIX)) {
+    logger.warn(
+      { parserLogLine: line.slice(WARNING_PREFIX.length) },
+      'ParserLog: {parserLogLine}'
+    )
     return
   }
   logger.info({ parserLogLine: line }, 'ParserLog: {parserLogLine}')

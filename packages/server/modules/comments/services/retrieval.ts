@@ -1,5 +1,4 @@
 import type { Optional } from '@speckle/shared'
-import { isUndefined } from 'lodash-es'
 import type {
   GetPaginatedBranchCommentsFactory,
   GetPaginatedBranchCommentsPage,
@@ -67,26 +66,15 @@ export const getPaginatedProjectCommentsFactory =
         )
     }
 
-    const alreadyRequestingArchivedOnly = !!params.filter?.archivedOnly
-
-    const [result, totalCount, totalArchivedCount] = await Promise.all([
+    const [result, totalCount] = await Promise.all([
       deps.getPaginatedProjectCommentsPage(params, { preloadedModelLatestVersions }),
       deps.getPaginatedProjectCommentsTotalCount(params, {
         preloadedModelLatestVersions
-      }),
-      alreadyRequestingArchivedOnly
-        ? undefined
-        : deps.getPaginatedProjectCommentsTotalCount(
-            { ...params, filter: { ...(params.filter || {}), archivedOnly: true } },
-            { preloadedModelLatestVersions }
-          )
+      })
     ])
 
     return {
       ...result,
-      totalCount,
-      totalArchivedCount: isUndefined(totalArchivedCount)
-        ? totalCount
-        : totalArchivedCount
+      totalCount
     }
   }

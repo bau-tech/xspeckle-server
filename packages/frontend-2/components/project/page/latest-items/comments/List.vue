@@ -17,7 +17,7 @@ const props = defineProps<{
 }>()
 
 const items = computed(() =>
-  (props.threads?.project?.commentThreads?.items || []).slice(
+  (props.threads?.project?.topics?.items || []).slice(
     0,
     props.disablePagination ? 8 : undefined
   )

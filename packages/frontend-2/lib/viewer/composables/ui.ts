@@ -369,9 +369,19 @@ export function useThreadUtilities() {
   const open = async (id: string) => {
     if (id === focusedThreadId.value) return
     await focusedThreadId.update(id)
+    // `openThread` only gets a just-created topic once the projectCommentsUpdated
+    // subscription round-trips and updates the cache (see postSetup.ts's
+    // useViewerCommentUpdateTracking) -- the create mutation's own response
+    // doesn't append it to the cached thread list itself. If that subscription
+    // delivery is ever delayed or missed (a connection blip, a timing race),
+    // this wait has no other way to resolve. A timeout with throwOnTimeout left
+    // at its default `false` means `until` just resolves anyway once it elapses
+    // (never throws), so a caller's `await open(id)` always completes -- e.g.
+    // NewThread.vue's onSubmit's `.finally()` -- instead of leaving a spinner
+    // stuck forever.
     await Promise.all([
-      until(focusedThreadId).toMatch((tid) => tid === id),
-      until(openThread).toMatch((t) => t?.id === id)
+      until(focusedThreadId).toMatch((tid) => tid === id, { timeout: 8000 }),
+      until(openThread).toMatch((t) => t?.id === id, { timeout: 8000 })
     ])
   }
 

@@ -12,6 +12,8 @@ dependencies = [
     "structlog>=25.4.0",
     "structlog-to-seq>=21.0.0",
     "specklepy[speckleifc]>=3.0.7",
+    # speckleifc has no upper bound, but does not run on ifcopenshell 0.9
+    "ifcopenshell>=0.8.5,<0.9",
     "colorful>=0.5.7",
     "prometheus-client>=0.23.1",
 ]

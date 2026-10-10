@@ -1,6 +1,11 @@
 numpy-stl==3.1.2
-specklepy==3.0.1
+specklepy==2026.8.1
 structlog==23.3.0
-numpy==1.26.4 # not directly required, pinned to avoid a vulnerability in <1.22.2
+numpy==2.2.6 # not directly required, pinned to avoid a vulnerability in <1.22.2; openskp needs >=2.2.6
 python-util==1.2.1 # not directly required, peer dependency of numpy-stl
-ifcopenshell==0.8.3 # required for speckleifc
+ifcopenshell==0.8.5 # required for speckleifc, which ships inside specklepy
+# rvt (clean-room RVT/RFA reader, used by src/rvt) is not listed here: the
+# Dockerfile builds it from a pinned rvt-rs commit (rvt-build-stage), since
+# the geometry support the importer needs isn't in a PyPI release yet.
+openskp==1.3.0 # clean-room SketchUp .skp reader (MIT) used by the SKP importer
+rhino3dm==8.35.0 # McNeel's openNURBS-based .3dm reader (MIT) used by the Rhino importer

@@ -58,6 +58,139 @@
               @submit="() => onSubmit()"
               @keydown="onKeyDownHandler"
             />
+            <button
+              type="button"
+              class="w-full text-left px-2 py-1 text-body-3xs text-foreground-2 hover:text-foreground"
+              @click="showBcfDetails = !showBcfDetails"
+            >
+              {{ showBcfDetails ? 'Hide details' : 'Add details' }}
+            </button>
+            <div v-if="showBcfDetails" class="flex flex-col gap-y-1 px-2 pb-1">
+              <ViewerCommentsBcfPropertySelect
+                v-model="topicType"
+                :items="BCF_TOPIC_TYPES"
+                label="Type"
+                name="new-thread-topic-type"
+              />
+              <ViewerCommentsBcfPropertySelect
+                v-model="topicStatus"
+                :items="BCF_TOPIC_STATUSES"
+                label="Status"
+                name="new-thread-topic-status"
+              />
+              <ViewerCommentsBcfPropertySelect
+                v-model="priority"
+                :items="BCF_PRIORITIES"
+                label="Priority"
+                name="new-thread-priority"
+              />
+              <FormTextInput
+                :model-value="stage ?? undefined"
+                name="new-thread-stage"
+                label="Stage"
+                placeholder="Stage"
+                size="sm"
+                @update:model-value="onStageInput"
+              />
+              <FormTextInput
+                :model-value="title ?? undefined"
+                name="new-thread-title"
+                label="Title"
+                placeholder="Title"
+                size="sm"
+                @update:model-value="onTitleInput"
+              />
+              <FormTags
+                :model-value="labels"
+                name="new-thread-labels"
+                label="Labels"
+                placeholder="Add a label"
+                size="sm"
+                @update:model-value="onLabelsInput"
+              />
+              <FormTextInput
+                :model-value="dueDate ?? undefined"
+                type="date"
+                name="new-thread-due-date"
+                label="Due date"
+                size="sm"
+                :custom-icon="CalendarIcon"
+                @update:model-value="onDueDateInput"
+              />
+              <FormTextInput
+                :model-value="assignedTo ?? undefined"
+                name="new-thread-assigned-to"
+                label="Assigned to"
+                placeholder="Assigned to"
+                size="sm"
+                @update:model-value="onAssignedToInput"
+              />
+              <FormSelectBase
+                :model-value="
+                  relatedTopicOptions.filter((o) => relatedTopicIds.includes(o.id))
+                "
+                :items="relatedTopicOptions"
+                by="id"
+                multiple
+                name="new-thread-related-topics"
+                label="Related topics"
+                placeholder="Related topics"
+                size="sm"
+                @update:model-value="onRelatedTopicsSelectionChanged"
+              >
+                <template #something-selected="{ value }">
+                  <span class="truncate">
+                    {{
+                      (Array.isArray(value) ? value : [value])
+                        .map(topicOptionLabel)
+                        .join(', ')
+                    }}
+                  </span>
+                </template>
+                <template #option="{ item }">
+                  <span class="truncate">{{ topicOptionLabel(item) }}</span>
+                </template>
+              </FormSelectBase>
+              <div class="flex flex-col gap-y-1">
+                <div class="text-body-3xs text-foreground-2 font-medium">
+                  Document references
+                </div>
+                <div
+                  v-for="(doc, index) in documentReferences"
+                  :key="index"
+                  class="flex gap-x-1 items-start"
+                >
+                  <FormTextInput
+                    :model-value="doc.url ?? undefined"
+                    :name="`new-thread-doc-url-${index}`"
+                    placeholder="URL"
+                    size="sm"
+                    class="flex-1"
+                    @update:model-value="(v) => onDocumentReferenceUrlInput(index, v)"
+                  />
+                  <FormTextInput
+                    :model-value="doc.description ?? undefined"
+                    :name="`new-thread-doc-desc-${index}`"
+                    placeholder="Description"
+                    size="sm"
+                    class="flex-1"
+                    @update:model-value="
+                      (v) => onDocumentReferenceDescriptionInput(index, v)
+                    "
+                  />
+                  <FormButton
+                    :icon-left="X"
+                    hide-text
+                    color="subtle"
+                    size="sm"
+                    @click="removeDocumentReference(index)"
+                  />
+                </div>
+                <FormButton size="sm" color="subtle" @click="addDocumentReference">
+                  + Add reference
+                </FormButton>
+              </div>
+            </div>
             <div class="w-full flex justify-between items-center p-1">
               <FormButton
                 :icon-left="Paperclip"
@@ -85,12 +218,22 @@ import type { Nullable } from '@speckle/shared'
 import { onKeyDown } from '@vueuse/core'
 import { useIsTypingUpdateEmitter } from '~~/lib/viewer/composables/commentBubbles'
 import type { ViewerNewThreadBubbleModel } from '~~/lib/viewer/composables/commentBubbles'
-import { useSubmitComment } from '~~/lib/viewer/composables/commentManagement'
+import {
+  useSubmitComment,
+  useProjectTopicOptions
+} from '~~/lib/viewer/composables/commentManagement'
 import type { CommentEditorValue } from '~~/lib/viewer/composables/commentManagement'
+import type { DocumentReferenceInput } from '~~/lib/common/generated/gql/graphql'
 import {
   isValidCommentContentInput,
   convertCommentEditorValueToInput
 } from '~~/lib/viewer/helpers/comments'
+import {
+  BCF_TOPIC_TYPES,
+  BCF_TOPIC_STATUSES,
+  BCF_PRIORITIES,
+  toBcfDueDateInput
+} from '~~/lib/viewer/helpers/bcf'
 import { useMixpanel } from '~~/lib/core/composables/mp'
 import { useThreadUtilities, useSelectionUtilities } from '~~/lib/viewer/composables/ui'
 import { useEmbed } from '~/lib/viewer/composables/setup/embed'
@@ -98,7 +241,13 @@ import { useServerFileUploadLimit } from '~~/lib/common/composables/serverInfo'
 import { UniqueFileTypeSpecifier } from '~~/lib/core/helpers/file'
 import { acceptedFileExtensions } from '@speckle/shared/blobs'
 import type { UploadableFileItem } from '@speckle/ui-components'
-import { Paperclip, SendHorizonal, Plus } from 'lucide-vue-next'
+import {
+  Paperclip,
+  SendHorizonal,
+  Plus,
+  X,
+  Calendar as CalendarIcon
+} from 'lucide-vue-next'
 
 const { isEnabled: isEmbedEnabled } = useEmbed()
 
@@ -128,6 +277,73 @@ const uploadZone = ref(null as Nullable<{ triggerPicker: () => void }>)
 const commentValue = ref<CommentEditorValue>({ doc: undefined, attachments: undefined })
 const threadContainer = ref(null as Nullable<HTMLElement>)
 const isPostingNewThread = ref(false)
+
+const showBcfDetails = ref(false)
+const topicType = ref(null as Nullable<string>)
+const topicStatus = ref(null as Nullable<string>)
+const priority = ref(null as Nullable<string>)
+const stage = ref(null as Nullable<string>)
+const title = ref(null as Nullable<string>)
+const dueDate = ref(null as Nullable<string>)
+const assignedTo = ref(null as Nullable<string>)
+const labels = ref<string[]>([])
+const relatedTopicIds = ref<string[]>([])
+const documentReferences = ref<DocumentReferenceInput[]>([])
+
+const { topicOptions } = useProjectTopicOptions()
+const relatedTopicOptions = computed(() => topicOptions.value)
+const topicOptionLabel = (t: {
+  title?: Nullable<string>
+  rawText?: Nullable<string>
+}) => t.title || t.rawText || 'Untitled'
+
+const resetBcfDetails = () => {
+  showBcfDetails.value = false
+  topicType.value = null
+  topicStatus.value = null
+  priority.value = null
+  stage.value = null
+  title.value = null
+  dueDate.value = null
+  assignedTo.value = null
+  labels.value = []
+  relatedTopicIds.value = []
+  documentReferences.value = []
+}
+
+const onStageInput = (v: string | undefined) => {
+  stage.value = v || null
+}
+const onTitleInput = (v: string | undefined) => {
+  title.value = v || null
+}
+const onDueDateInput = (v: string | undefined) => {
+  dueDate.value = v || null
+}
+const onAssignedToInput = (v: string | undefined) => {
+  assignedTo.value = v || null
+}
+const onLabelsInput = (v: string[]) => {
+  labels.value = v
+}
+const onRelatedTopicsSelectionChanged = (
+  selected?: { id: string }[] | { id: string }
+) => {
+  const items = Array.isArray(selected) ? selected : selected ? [selected] : []
+  relatedTopicIds.value = items.map((o) => o.id)
+}
+const addDocumentReference = () => {
+  documentReferences.value.push({ url: '', description: '' })
+}
+const removeDocumentReference = (index: number) => {
+  documentReferences.value.splice(index, 1)
+}
+const onDocumentReferenceUrlInput = (index: number, v: string | undefined) => {
+  documentReferences.value[index].url = v
+}
+const onDocumentReferenceDescriptionInput = (index: number, v: string | undefined) => {
+  documentReferences.value[index].description = v
+}
 
 const acceptValue = [
   UniqueFileTypeSpecifier.AnyImage,
@@ -178,7 +394,18 @@ const onSubmit = (comment?: CommentEditorValue) => {
   isPostingNewThread.value = true
   pauseAutomaticUpdates.value = true
   updateIsTyping(true) // so that user shows up as typing until the new bubble appears
-  createThread(content)
+  createThread(content, {
+    topicType: topicType.value,
+    topicStatus: topicStatus.value,
+    priority: priority.value,
+    stage: stage.value,
+    title: title.value,
+    dueDate: toBcfDueDateInput(dueDate.value),
+    assignedTo: assignedTo.value,
+    labels: labels.value,
+    relatedTopicIds: relatedTopicIds.value,
+    documentReferences: documentReferences.value
+  })
     .then(async (newThread) => {
       const threadId = newThread?.id
       if (!threadId) return
@@ -191,6 +418,7 @@ const onSubmit = (comment?: CommentEditorValue) => {
         ...props.modelValue,
         isExpanded: false
       })
+      resetBcfDetails()
     })
     .finally(() => {
       isPostingNewThread.value = false
@@ -230,6 +458,7 @@ watch(
       doc: undefined,
       attachments: undefined
     }
+    resetBcfDetails()
   }
 )
 </script>

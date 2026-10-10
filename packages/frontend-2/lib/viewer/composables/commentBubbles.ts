@@ -36,7 +36,7 @@ import type { Merge } from 'type-fest'
 import { useSelectionUtilities } from '~~/lib/viewer/composables/ui'
 
 graphql(`
-  fragment ViewerCommentBubblesData on Comment {
+  fragment ViewerCommentBubblesData on Topic {
     id
     viewedAt
     viewerState

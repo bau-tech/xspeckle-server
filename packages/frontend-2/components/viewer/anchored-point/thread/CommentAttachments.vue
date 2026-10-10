@@ -60,12 +60,12 @@ import type { LayoutDialogButton } from '@speckle/ui-components'
 import { Download, Paperclip, TriangleAlert } from 'lucide-vue-next'
 
 type AttachmentFile = NonNullable<
-  Get<ThreadCommentAttachmentFragment, 'text.attachments[0]'>
+  Get<ThreadCommentAttachmentFragment, 'comment.attachments[0]'>
 >
 
 graphql(`
   fragment ThreadCommentAttachment on Comment {
-    text {
+    comment {
       attachments {
         id
         fileName
@@ -77,7 +77,7 @@ graphql(`
 `)
 
 const props = defineProps<{
-  attachments: ThreadCommentAttachmentFragment
+  attachments: AttachmentFile[]
   projectId: string
 }>()
 
@@ -121,7 +121,7 @@ const onDownloadClick = async () => {
   }
 }
 
-const attachmentList = computed(() => props.attachments?.text?.attachments || [])
+const attachmentList = computed(() => props.attachments || [])
 
 const dialogButtons = computed((): Optional<LayoutDialogButton[]> => {
   if (!dialogAttachment.value) return undefined

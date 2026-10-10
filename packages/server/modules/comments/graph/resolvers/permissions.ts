@@ -2,6 +2,12 @@ import type { Resolvers } from '@/modules/core/graph/generated/graphql'
 import { Authz } from '@speckle/shared'
 
 export default {
+  Topic: {
+    permissions: async (parent) => ({
+      commentId: parent.id,
+      projectId: parent.streamId
+    })
+  },
   Comment: {
     permissions: async (parent) => ({
       commentId: parent.id,
@@ -9,12 +15,12 @@ export default {
     })
   },
   CommentPermissionChecks: {
-    canArchive: async (parent, _args, ctx) => {
-      const canArchive = await ctx.authPolicies.project.comment.canArchive({
+    canEdit: async (parent, _args, ctx) => {
+      const canEdit = await ctx.authPolicies.project.comment.canEdit({
         ...parent,
         userId: ctx.userId
       })
-      return Authz.toGraphqlResult(canArchive)
+      return Authz.toGraphqlResult(canEdit)
     }
   },
   ProjectPermissionChecks: {

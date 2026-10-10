@@ -17,8 +17,8 @@ export const PanelShortcuts = {
     action: 'ToggleFilters'
   },
   ToggleDiscussions: {
-    name: 'Discussions',
-    description: 'Toggle discussions panel',
+    name: 'BCF',
+    description: 'Toggle BCF panel',
     modifiers: [ModifierKeys.Shift],
     key: 'D',
     action: 'ToggleDiscussions'

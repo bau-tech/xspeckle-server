@@ -1,19 +1,25 @@
 import type {
+  CommentDocumentReferenceRecord,
   CommentLinkRecord,
   CommentRecord,
   CommentLinkResourceType,
-  CommentViewRecord
+  CommentRelatedTopicRecord,
+  CommentViewRecord,
+  TopicViewpointRecord
 } from '@/modules/comments/helpers/types'
 import {
   BranchCommits,
   Branches,
+  CommentDocumentReferences,
   CommentLinks,
+  CommentRelatedTopics,
   Comments,
   CommentViews,
   Commits,
   knex,
   Objects,
-  StreamCommits
+  StreamCommits,
+  TopicViewpoints
 } from '@/modules/core/dbSchema'
 import type { ResourceIdentifier } from '@/modules/core/graph/generated/graphql'
 import { ResourceType } from '@/modules/core/graph/generated/graphql'
@@ -27,12 +33,18 @@ import { isNullOrUndefined, SpeckleViewer } from '@speckle/shared'
 import type { SmartTextEditorValueSchema } from '@/modules/core/services/richTextEditorService'
 import type { Merge } from 'type-fest'
 import type {
+  AssignNextTopicIndex,
   CheckStreamResourceAccess,
   DeleteComment,
+  DeleteCommentDocumentReferences,
+  DeleteCommentRelatedTopics,
+  DeleteTopicAndReplies,
   GetBatchedStreamComments,
   GetBranchCommentCounts,
   GetComment,
+  GetCommentDocumentReferences,
   GetCommentParents,
+  GetCommentRelatedTopics,
   GetCommentReplyAuthorIds,
   GetCommentReplyCounts,
   GetComments,
@@ -43,9 +55,19 @@ import type {
   GetPaginatedCommitCommentsTotalCount,
   GetPaginatedProjectCommentsPage,
   GetPaginatedProjectCommentsTotalCount,
+  GetTopicViewpoints,
+  GetTopicViewpointByGuid,
+  DeleteTopicViewpoint,
+  NextTopicViewpointIndex,
+  RekeyTopicViewpoint,
+  GetCommentByGuid,
+  GetTopicIdsByGuids,
   GetUserCommentsViewedAt,
+  InsertCommentDocumentReferences,
   InsertCommentLinks,
+  InsertCommentRelatedTopics,
   InsertComments,
+  InsertTopicViewpoint,
   MarkCommentUpdated,
   MarkCommentViewed,
   PaginatedBranchCommentsParams,
@@ -75,7 +97,12 @@ const tables = {
   commentLinks: (db: Knex) => db<CommentLinkRecord>(CommentLinks.name),
   commentViews: (db: Knex) => db<CommentViewRecord>(CommentViews.name),
   commits: (db: Knex) => db<CommitRecord>(Commits.name),
-  branches: (db: Knex) => db<BranchRecord>(Branches.name)
+  branches: (db: Knex) => db<BranchRecord>(Branches.name),
+  commentRelatedTopics: (db: Knex) =>
+    db<CommentRelatedTopicRecord>(CommentRelatedTopics.name),
+  commentDocumentReferences: (db: Knex) =>
+    db<CommentDocumentReferenceRecord>(CommentDocumentReferences.name),
+  topicViewpoints: (db: Knex) => db<TopicViewpointRecord>(TopicViewpoints.name)
 }
 
 export const generateCommentId = () => crs({ length: 10 })
@@ -210,12 +237,9 @@ export const insertCommentLinksFactory =
 
 export const getStreamCommentCountsFactory =
   (deps: { db: Knex }) =>
-  async (
-    streamIds: string[],
-    options?: Partial<{ threadsOnly: boolean; includeArchived: boolean }>
-  ) => {
+  async (streamIds: string[], options?: Partial<{ threadsOnly: boolean }>) => {
     if (!streamIds?.length) return []
-    const { threadsOnly, includeArchived } = options || {}
+    const { threadsOnly } = options || {}
     const q = tables
       .comments(deps.db)
       .select(Comments.col.streamId)
@@ -227,22 +251,15 @@ export const getStreamCommentCountsFactory =
       q.andWhere(Comments.col.parentComment, null)
     }
 
-    if (!includeArchived) {
-      q.andWhere(Comments.col.archived, false)
-    }
-
     const results = (await q) as { streamId: string; count: string }[]
     return results.map((r) => ({ ...r, count: parseInt(r.count) }))
   }
 
 export const getCommitCommentCountsFactory =
   (deps: { db: Knex }): GetCommitCommentCounts =>
-  async (
-    commitIds: string[],
-    options?: Partial<{ threadsOnly: boolean; includeArchived: boolean }>
-  ) => {
+  async (commitIds: string[], options?: Partial<{ threadsOnly: boolean }>) => {
     if (!commitIds?.length) return []
-    const { threadsOnly, includeArchived } = options || {}
+    const { threadsOnly } = options || {}
 
     const q = tables
       .commentLinks(deps.db)
@@ -252,16 +269,9 @@ export const getCommitCommentCountsFactory =
       .count()
       .groupBy(CommentLinks.col.resourceId)
 
-    if (threadsOnly || !includeArchived) {
+    if (threadsOnly) {
       q.innerJoin(Comments.name, Comments.col.id, CommentLinks.col.commentId)
-
-      if (threadsOnly) {
-        q.where(Comments.col.parentComment, null)
-      }
-
-      if (!includeArchived) {
-        q.where(Comments.col.archived, false)
-      }
+      q.where(Comments.col.parentComment, null)
     }
 
     const results = (await q) as { resourceId: string; count: string }[]
@@ -270,22 +280,16 @@ export const getCommitCommentCountsFactory =
 
 export const getStreamCommentCountFactory =
   (deps: { db: Knex }) =>
-  async (
-    streamId: string,
-    options?: Partial<{ threadsOnly: boolean; includeArchived: boolean }>
-  ) => {
+  async (streamId: string, options?: Partial<{ threadsOnly: boolean }>) => {
     const [res] = await getStreamCommentCountsFactory(deps)([streamId], options)
     return res?.count || 0
   }
 
 export const getBranchCommentCountsFactory =
   (deps: { db: Knex }): GetBranchCommentCounts =>
-  async (
-    branchIds: string[],
-    options?: Partial<{ threadsOnly: boolean; includeArchived: boolean }>
-  ) => {
+  async (branchIds: string[], options?: Partial<{ threadsOnly: boolean }>) => {
     if (!branchIds.length) return []
-    const { threadsOnly, includeArchived } = options || {}
+    const { threadsOnly } = options || {}
 
     const q = tables
       .branches(deps.db)
@@ -306,19 +310,14 @@ export const getBranchCommentCountsFactory =
       q.andWhere(Comments.col.parentComment, null)
     }
 
-    if (!includeArchived) {
-      q.andWhere(Comments.col.archived, false)
-    }
-
     const results = (await q) as { id: string; count: string }[]
     return results.map((r) => ({ ...r, count: parseInt(r.count) }))
   }
 
 export const getCommentReplyCountsFactory =
   (deps: { db: Knex }): GetCommentReplyCounts =>
-  async (threadIds: string[], options?: Partial<{ includeArchived: boolean }>) => {
+  async (threadIds: string[]) => {
     if (!threadIds.length) return []
-    const { includeArchived } = options || {}
 
     const q = tables
       .comments(deps.db)
@@ -327,19 +326,14 @@ export const getCommentReplyCountsFactory =
       .count()
       .groupBy(Comments.col.parentComment)
 
-    if (!includeArchived) {
-      q.andWhere(Comments.col.archived, false)
-    }
-
     const results = (await q) as { parentComment: string; count: string }[]
     return results.map((r) => ({ threadId: r.parentComment, count: parseInt(r.count) }))
   }
 
 export const getCommentReplyAuthorIdsFactory =
   (deps: { db: Knex }): GetCommentReplyAuthorIds =>
-  async (threadIds: string[], options?: Partial<{ includeArchived: boolean }>) => {
+  async (threadIds: string[]) => {
     if (!threadIds.length) return {}
-    const { includeArchived } = options || {}
 
     const q = tables
       .comments(deps.db)
@@ -349,10 +343,6 @@ export const getCommentReplyAuthorIdsFactory =
       ])
       .whereIn(Comments.col.parentComment, threadIds)
       .groupBy(Comments.col.parentComment, Comments.col.authorId)
-
-    if (!includeArchived) {
-      q.andWhere(Comments.col.archived, false)
-    }
 
     const results = await q
     return reduce(
@@ -385,10 +375,6 @@ const getPaginatedCommitCommentsBaseQueryFactory =
       })
       .innerJoin(Comments.name, Comments.col.id, CommentLinks.col.commentId)
       .where(Commits.col.id, commitId)
-
-    if (!filter?.includeArchived) {
-      q.andWhere(Comments.col.archived, false)
-    }
 
     if (filter?.threadsOnly) {
       q.whereNull(Comments.col.parentComment)
@@ -450,10 +436,6 @@ const getPaginatedBranchCommentsBaseQueryFactory =
       })
       .innerJoin(Comments.name, Comments.col.id, CommentLinks.col.commentId)
       .where(Branches.col.id, branchId)
-
-    if (!filter?.includeArchived) {
-      q.andWhere(Comments.col.archived, false)
-    }
 
     if (filter?.threadsOnly) {
       q.whereNull(Comments.col.parentComment)
@@ -624,12 +606,6 @@ const getPaginatedProjectCommentsBaseQueryFactory =
       })
     }
 
-    if (!filter?.includeArchived && !filter?.archivedOnly) {
-      q.andWhere(Comments.col.archived, false)
-    } else if (filter?.archivedOnly) {
-      q.andWhere(Comments.col.archived, true)
-    }
-
     if (filter?.threadsOnly) {
       q.whereNull(Comments.col.parentComment)
     }
@@ -796,6 +772,15 @@ export const deleteCommentFactory =
     return !!(await tables.comments(deps.db).where(Comments.col.id, commentId).del())
   }
 
+export const deleteTopicAndRepliesFactory =
+  (deps: { db: Knex }): DeleteTopicAndReplies =>
+  async (topicId) => {
+    // No cascading FK from a reply to its parent topic -- delete replies
+    // first or the topic's own delete hits a foreign key violation.
+    await tables.comments(deps.db).where(Comments.col.parentComment, topicId).del()
+    return !!(await tables.comments(deps.db).where(Comments.col.id, topicId).del())
+  }
+
 /**
  * One of `streamId` or `resources` expected. If both are provided, then
  * `resources` takes precedence.
@@ -805,7 +790,6 @@ type GetCommentsLegacyParams = {
   cursor?: string | null
   userId?: string | null
   replies?: boolean | null
-  archived?: boolean | null
 } & (
   | {
       resources: ResourceIdentifier[]
@@ -828,8 +812,7 @@ export const getCommentsLegacyFactory =
     cursor,
     userId = null,
     replies = false,
-    streamId,
-    archived = false
+    streamId
   }: GetCommentsLegacyParams) => {
     const query = deps.db().with('comms', (cte) => {
       cte.select().distinctOn('id').from('comments')
@@ -856,7 +839,6 @@ export const getCommentsLegacyFactory =
       if (!replies) {
         cte.whereNull('parentComment')
       }
-      cte.where('archived', '=', archived)
     })
 
     query.select().from('comms')
@@ -897,6 +879,189 @@ export const getCommentsLegacyFactory =
     }
   }
 
+/**
+ * Assigns the next BCF 3.0 sequential topic index for a project, guarded by
+ * an advisory lock scoped to the streamId so concurrent creates don't race
+ * to the same number -- mirrors the external BCF server's own sequencing.
+ */
+export const assignNextTopicIndexFactory =
+  (deps: { db: Knex }): AssignNextTopicIndex =>
+  async (streamId, options) => {
+    const runner = options?.trx || deps.db
+    await runner.raw('SELECT pg_advisory_xact_lock(hashtext(?))', [streamId])
+    const [row] = await runner(Comments.name)
+      .max(Comments.col.index, { as: 'maxIndex' })
+      .where(Comments.col.streamId, streamId)
+      .whereNull(Comments.col.parentComment)
+    return (Number(row?.maxIndex) || 0) + 1
+  }
+
+export const insertCommentRelatedTopicsFactory =
+  (deps: { db: Knex }): InsertCommentRelatedTopics =>
+  async (rows, options) => {
+    if (!rows.length) return
+    // Directional, as in BCF: a topic's related_topics are its own list, not
+    // mirrored onto the other topic.
+    const q = tables
+      .commentRelatedTopics(deps.db)
+      .insert(rows.filter((r) => r.topicId !== r.relatedTopicId))
+      .onConflict(['topicId', 'relatedTopicId'])
+      .ignore()
+    if (options?.trx) q.transacting(options.trx)
+    await q
+  }
+
+export const deleteCommentRelatedTopicsFactory =
+  (deps: { db: Knex }): DeleteCommentRelatedTopics =>
+  async (topicId) => {
+    await tables
+      .commentRelatedTopics(deps.db)
+      .where(CommentRelatedTopics.col.topicId, topicId)
+      .del()
+  }
+
+export const getCommentRelatedTopicsFactory =
+  (deps: { db: Knex }): GetCommentRelatedTopics =>
+  async (topicId) => {
+    return await tables
+      .commentRelatedTopics(deps.db)
+      .where(CommentRelatedTopics.col.topicId, topicId)
+  }
+
+export const insertCommentDocumentReferencesFactory =
+  (deps: { db: Knex }): InsertCommentDocumentReferences =>
+  async (rows, options) => {
+    if (!rows.length) return
+    const q = tables
+      .commentDocumentReferences(deps.db)
+      .insert(rows.map((r) => ({ ...r, id: r.id || generateCommentId() })))
+    if (options?.trx) q.transacting(options.trx)
+    await q
+  }
+
+export const deleteCommentDocumentReferencesFactory =
+  (deps: { db: Knex }): DeleteCommentDocumentReferences =>
+  async (topicId) => {
+    await tables
+      .commentDocumentReferences(deps.db)
+      .where(CommentDocumentReferences.col.topicId, topicId)
+      .del()
+  }
+
+export const getCommentDocumentReferencesFactory =
+  (deps: { db: Knex }): GetCommentDocumentReferences =>
+  async (topicId) => {
+    return await tables
+      .commentDocumentReferences(deps.db)
+      .where(CommentDocumentReferences.col.topicId, topicId)
+  }
+
+export const insertTopicViewpointFactory =
+  (deps: { db: Knex }): InsertTopicViewpoint =>
+  async (row) => {
+    const [inserted] = await tables
+      .topicViewpoints(deps.db)
+      .insert({ ...row, id: row.id || generateCommentId() }, '*')
+    return inserted
+  }
+
+export const getTopicViewpointsFactory =
+  (deps: { db: Knex }): GetTopicViewpoints =>
+  async (topicId) => {
+    return await tables
+      .topicViewpoints(deps.db)
+      .where(TopicViewpoints.col.topicId, topicId)
+      .orderByRaw(`?? asc nulls last, ?? asc`, [
+        TopicViewpoints.col.index,
+        TopicViewpoints.col.createdAt
+      ])
+  }
+
+export const getTopicViewpointByGuidFactory =
+  (deps: { db: Knex }): GetTopicViewpointByGuid =>
+  async ({ topicId, guid }) => {
+    return await tables
+      .topicViewpoints(deps.db)
+      .where(TopicViewpoints.col.topicId, topicId)
+      .andWhere(TopicViewpoints.col.guid, guid)
+      .first()
+  }
+
+export const deleteTopicViewpointFactory =
+  (deps: { db: Knex }): DeleteTopicViewpoint =>
+  async ({ topicId, guid }) => {
+    return await deps.db.transaction(async (trx) => {
+      await tables
+        .comments(trx)
+        .where(Comments.col.parentComment, topicId)
+        .andWhere(Comments.col.viewpointGuid, guid)
+        .update({ viewpointGuid: null })
+      const deleted = await tables
+        .topicViewpoints(trx)
+        .where(TopicViewpoints.col.topicId, topicId)
+        .andWhere(TopicViewpoints.col.guid, guid)
+        .del()
+      return deleted > 0
+    })
+  }
+
+export const rekeyTopicViewpointFactory =
+  (deps: { db: Knex }): RekeyTopicViewpoint =>
+  async ({ topicId, guid, newGuid }) => {
+    return await deps.db.transaction(async (trx) => {
+      const taken = await tables
+        .topicViewpoints(trx)
+        .where(TopicViewpoints.col.guid, newGuid)
+        .first()
+      if (taken) return false
+      const updated = await tables
+        .topicViewpoints(trx)
+        .where(TopicViewpoints.col.topicId, topicId)
+        .andWhere(TopicViewpoints.col.guid, guid)
+        .update({ guid: newGuid })
+      if (!updated) return false
+      await tables
+        .comments(trx)
+        .where(Comments.col.parentComment, topicId)
+        .andWhere(Comments.col.viewpointGuid, guid)
+        .update({ viewpointGuid: newGuid })
+      return true
+    })
+  }
+
+export const nextTopicViewpointIndexFactory =
+  (deps: { db: Knex }): NextTopicViewpointIndex =>
+  async (topicId) => {
+    const [row] = await tables
+      .topicViewpoints(deps.db)
+      .max(TopicViewpoints.col.index, { as: 'maxIndex' })
+      .where(TopicViewpoints.col.topicId, topicId)
+    return (Number((row as { maxIndex?: unknown })?.maxIndex) || 0) + 1
+  }
+
+export const getCommentByGuidFactory =
+  (deps: { db: Knex }): GetCommentByGuid =>
+  async ({ streamId, guid }) => {
+    return await tables
+      .comments(deps.db)
+      .where(Comments.col.streamId, streamId)
+      .andWhere(Comments.col.guid, guid)
+      .first()
+  }
+
+export const getTopicIdsByGuidsFactory =
+  (deps: { db: Knex }): GetTopicIdsByGuids =>
+  async ({ streamId, guids }) => {
+    if (!guids.length) return []
+    const rows = await tables
+      .comments(deps.db)
+      .select<Array<Pick<CommentRecord, 'id'>>>(Comments.col.id)
+      .where(Comments.col.streamId, streamId)
+      .whereNull(Comments.col.parentComment)
+      .whereIn(Comments.col.guid, guids)
+    return rows.map((r) => r.id)
+  }
+
 export const getResourceCommentCountFactory =
   (deps: { db: Knex }) =>
   async ({ resourceId }: { resourceId: string }) => {
@@ -905,10 +1070,26 @@ export const getResourceCommentCountFactory =
       .count('commentId')
       .where({ resourceId })
       .join('comments', 'comments.id', '=', 'commentId')
-      .where('comments.archived', '=', false)
 
     if (res && res.count) {
       return parseInt(String(res.count))
     }
     return 0
   }
+
+/**
+ * The BCF topic/comment/viewpoint repositories the create-topic and
+ * create-comment services need, for call sites outside the GraphQL resolvers
+ * (CLI, cross-server sync, test helpers) to spread into those factories'
+ * deps instead of each wiring them by hand.
+ */
+export const bcfTopicRepositoriesFactory = (deps: { db: Knex }) => ({
+  assignNextTopicIndex: assignNextTopicIndexFactory(deps),
+  insertCommentRelatedTopics: insertCommentRelatedTopicsFactory(deps),
+  insertCommentDocumentReferences: insertCommentDocumentReferencesFactory(deps),
+  insertTopicViewpoint: insertTopicViewpointFactory(deps),
+  getCommentByGuid: getCommentByGuidFactory(deps),
+  getTopicIdsByGuids: getTopicIdsByGuidsFactory(deps),
+  getTopicViewpointByGuid: getTopicViewpointByGuidFactory(deps),
+  nextTopicViewpointIndex: nextTopicViewpointIndexFactory(deps)
+})

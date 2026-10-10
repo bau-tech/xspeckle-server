@@ -22,8 +22,8 @@
           </template>
           <template v-else>
             <CommonTiptapTextEditor
-              v-if="comment?.text?.doc"
-              :model-value="comment.text.doc"
+              v-if="content?.doc"
+              :model-value="content.doc"
               :schema-options="{ multiLine: false }"
               :project-id="projectId"
               disable-invitation-cta
@@ -33,7 +33,7 @@
           </template>
 
           <ViewerAnchoredPointThreadCommentAttachments
-            :attachments="comment"
+            :attachments="content?.attachments || []"
             :project-id="projectId"
           />
         </div>
@@ -42,11 +42,14 @@
   </div>
 </template>
 <script setup lang="ts">
-import type { ViewerCommentsReplyItemFragment } from '~~/lib/common/generated/gql/graphql'
+import type {
+  ViewerCommentsReplyItemFragment,
+  ViewerCommentThreadFragment
+} from '~~/lib/common/generated/gql/graphql'
 import { useInjectedViewerState } from '~/lib/viewer/composables/setup'
 
 const props = defineProps<{
-  comment: ViewerCommentsReplyItemFragment
+  comment: ViewerCommentsReplyItemFragment | ViewerCommentThreadFragment
   projectId: string
 }>()
 
@@ -68,5 +71,13 @@ const createdAt = computed(() => {
   }
 })
 
-const isLimited = computed(() => !props.comment.text)
+// The first message in a thread is the Topic itself (`text`), subsequent ones
+// are Comments (`comment`) -- both carry the same doc/attachments shape.
+const content = computed(() => {
+  const c = props.comment as Partial<ViewerCommentsReplyItemFragment> &
+    Partial<ViewerCommentThreadFragment>
+  return c.comment ?? c.text
+})
+
+const isLimited = computed(() => !content.value)
 </script>

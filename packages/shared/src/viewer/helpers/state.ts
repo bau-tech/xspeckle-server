@@ -71,8 +71,13 @@ export interface SectionBoxData {
  * - ui.filters.propertyFilters.condition updated
  * v1.7 -> 1.8
  * - ui.filters.propertyFilters.numericRange added
+ * v1.8 -> 1.9
+ * - ui.camera.direction, ui.camera.upVector, ui.camera.fieldOfView,
+ *   ui.camera.viewToWorldScale added (BCF viewpoint parity)
+ * - ui.bcf added: clippingPlanes, defaultVisibility, visibilityExceptions,
+ *   coloring (BCF viewpoint parity)
  */
-export const SERIALIZED_VIEWER_STATE_VERSION = 1.8
+export const SERIALIZED_VIEWER_STATE_VERSION = 1.9
 
 export type SerializedViewerState = {
   projectId: string
@@ -129,6 +134,28 @@ export type SerializedViewerState = {
       target: number[]
       isOrthoProjection: boolean
       zoom: number
+      /** BCF camera_direction. Null when not explicitly captured -- a
+       * consumer can derive normalize(target - position) as a fallback. */
+      direction: Nullable<number[]>
+      /** BCF camera_up_vector. Defaults to [0, 1, 0] (the viewer is always
+       * Y-up), never left null. */
+      upVector: Nullable<number[]>
+      /** BCF field_of_view. Defaults to 60 when not explicitly captured. */
+      fieldOfView: Nullable<number>
+      /** BCF view_to_world_scale, only meaningful for orthogonal views. */
+      viewToWorldScale: Nullable<number>
+    }
+    /**
+     * BCF-only viewpoint concepts with no other Speckle analog. Stored raw
+     * and uninterpreted -- e.g. defaultVisibility/visibilityExceptions are
+     * never resolved into an actual show/hide decision here, same as BCF
+     * servers generally leave that to the consuming client.
+     */
+    bcf: {
+      clippingPlanes: Array<{ location: number[]; direction: number[] }>
+      defaultVisibility: boolean
+      visibilityExceptions: string[]
+      coloring: Array<{ ifcGuid: string; color: string }>
     }
     viewMode: {
       mode: number
@@ -330,7 +357,17 @@ const initializeMissingData = (state: UnformattedState): SerializedViewerState =
         position: state.ui?.camera?.position || throwInvalidError('ui.camera.position'),
         target: state.ui?.camera?.target || throwInvalidError('ui.camera.target'),
         isOrthoProjection: state.ui?.camera?.isOrthoProjection || false,
-        zoom: state.ui?.camera?.zoom || 1
+        zoom: state.ui?.camera?.zoom || 1,
+        direction: state.ui?.camera?.direction || null,
+        upVector: state.ui?.camera?.upVector || [0, 1, 0],
+        fieldOfView: state.ui?.camera?.fieldOfView ?? 60,
+        viewToWorldScale: state.ui?.camera?.viewToWorldScale ?? null
+      },
+      bcf: {
+        clippingPlanes: state.ui?.bcf?.clippingPlanes || [],
+        defaultVisibility: state.ui?.bcf?.defaultVisibility ?? true,
+        visibilityExceptions: state.ui?.bcf?.visibilityExceptions || [],
+        coloring: state.ui?.bcf?.coloring || []
       },
       viewMode: {
         mode: viewModeType ?? 0,

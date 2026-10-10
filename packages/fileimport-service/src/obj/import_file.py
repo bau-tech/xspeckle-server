@@ -16,9 +16,11 @@ from specklepy.core.api.models import Version
 from obj_file import ObjFile
 
 import structlog
-from logging import INFO, basicConfig
+from logging import INFO, WARNING, basicConfig, getLogger
 
 basicConfig(format="%(message)s", stream=sys.stdout, level=INFO)
+# gql (specklepy's GraphQL client) logs every request and response body at INFO
+getLogger("gql.transport.requests").setLevel(WARNING)
 
 structlog.configure(
     processors=[

@@ -4,14 +4,14 @@ import type {
 } from '@/modules/activitystream/domain/types'
 import type { ViewerResourceItem } from '@/modules/viewer/domain/types/resources'
 import type { CommentRecord } from '@/modules/comments/helpers/types'
-import type { MutationCommentArchiveArgs } from '@/modules/core/graph/generated/graphql'
 
 export const commentEventsNamespace = 'comments' as const
 
 export const CommentEvents = {
   Created: `${commentEventsNamespace}.created`,
   Updated: `${commentEventsNamespace}.updated`,
-  Archived: `${commentEventsNamespace}.archived`
+  /** A Topic (with all its comments) or a single Comment was deleted. */
+  Deleted: `${commentEventsNamespace}.deleted`
 } as const
 
 export type CommentEventsPayloads = {
@@ -24,10 +24,11 @@ export type CommentEventsPayloads = {
   [CommentEvents.Updated]: {
     previousComment: CommentRecord
     newComment: CommentRecord
+    /** Who made the change, when known (not necessarily the author). */
+    userId?: string
   }
-  [CommentEvents.Archived]: {
-    userId: string
-    input: MutationCommentArchiveArgs
+  [CommentEvents.Deleted]: {
     comment: CommentRecord
+    userId?: string
   }
 }

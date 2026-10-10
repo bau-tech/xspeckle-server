@@ -7,7 +7,8 @@ import {
   insertCommentLinksFactory,
   insertCommentsFactory,
   markCommentUpdatedFactory,
-  markCommentViewedFactory
+  markCommentViewedFactory,
+  bcfTopicRepositoriesFactory
 } from '@/modules/comments/repositories/comments'
 import { validateInputAttachmentsFactory } from '@/modules/comments/services/commentTextService'
 import {
@@ -117,6 +118,7 @@ const crossServerSyncModule: SpeckleModule = {
       insertComments,
       insertCommentLinks,
       markCommentViewed,
+      ...bcfTopicRepositoriesFactory({ db }),
       emitEvent: getEventBus().emit
     })
     const createCommentReplyAndNotify = createCommentReplyAndNotifyFactory({
@@ -125,6 +127,7 @@ const crossServerSyncModule: SpeckleModule = {
       insertComments,
       insertCommentLinks,
       markCommentUpdated: markCommentUpdatedFactory({ db }),
+      ...bcfTopicRepositoriesFactory({ db }),
       emitEvent: getEventBus().emit,
       getViewerResourcesForComment: getViewerResourcesForCommentFactory({
         getCommentsResources: getCommentsResourcesFactory({ db }),

@@ -1,8 +1,7 @@
 import type {
   AddThreadCreatedActivity,
   AddReplyAddedActivity,
-  SaveStreamActivity,
-  AddCommentArchivedActivity
+  SaveStreamActivity
 } from '@/modules/activitystream/domain/operations'
 import type {
   CommentCreatedActivityInput,
@@ -13,6 +12,7 @@ import {
   StreamResourceTypes
 } from '@/modules/activitystream/helpers/types'
 import type { CommentEventsPayloads } from '@/modules/comments/domain/events'
+import type { CommentRecord } from '@/modules/comments/helpers/types'
 import { CommentEvents } from '@/modules/comments/domain/events'
 import type { ReplyCreateInput } from '@/modules/core/graph/generated/graphql'
 import type { EventBusListen } from '@/modules/shared/services/eventBus'
@@ -54,7 +54,7 @@ const addReplyAddedActivityFactory =
 
     const parentCommentId = isLegacyReplyCreateInput(input)
       ? input.parentComment
-      : input.threadId
+      : input.topicId
     await saveStreamActivity({
       streamId: reply.streamId,
       resourceType: StreamResourceTypes.Comment,
@@ -63,26 +63,6 @@ const addReplyAddedActivityFactory =
       userId: reply.authorId,
       info: { input },
       message: `Comment reply #${reply.id} created`
-    })
-  }
-
-const addCommentArchivedActivityFactory =
-  ({
-    saveStreamActivity
-  }: {
-    saveStreamActivity: SaveStreamActivity
-  }): AddCommentArchivedActivity =>
-  async (params) => {
-    const { userId, input, comment } = params
-
-    await saveStreamActivity({
-      streamId: comment.streamId,
-      resourceType: StreamResourceTypes.Comment,
-      resourceId: comment.id,
-      actionType: StreamActionTypes.Comment.Archive,
-      userId,
-      info: { input },
-      message: `Comment #${comment.id} archived`
     })
   }
 
@@ -113,7 +93,16 @@ export const reportCommentActivityFactory =
   () => {
     const addThreadCreatedActivity = addThreadCreatedActivityFactory(deps)
     const addReplyAddedActivity = addReplyAddedActivityFactory(deps)
-    const addCommentArchivedActivity = addCommentArchivedActivityFactory(deps)
+
+    // BCF sync consumers (the external BCF server) subscribe to these via webhooks to learn
+    // about every change, not only creations. `info` identifies the row both
+    // by Speckle id and BCF guid.
+    const bcfChangeInfo = (comment: CommentRecord) => ({
+      topicId: comment.parentComment || comment.id,
+      commentId: comment.parentComment ? comment.id : null,
+      guid: comment.guid,
+      isTopic: !comment.parentComment
+    })
 
     const quitters = [
       deps.eventListen(CommentEvents.Created, async ({ payload }) => {
@@ -126,8 +115,29 @@ export const reportCommentActivityFactory =
           await addThreadCreatedActivity(payload)
         }
       }),
-      deps.eventListen(CommentEvents.Archived, async ({ payload }) => {
-        await addCommentArchivedActivity(payload)
+      deps.eventListen(CommentEvents.Updated, async ({ payload }) => {
+        const comment = payload.newComment
+        await deps.saveStreamActivity({
+          streamId: comment.streamId,
+          resourceType: StreamResourceTypes.Comment,
+          resourceId: comment.parentComment || comment.id,
+          actionType: StreamActionTypes.Comment.Update,
+          userId: payload.userId ?? comment.authorId,
+          info: bcfChangeInfo(comment),
+          message: `Comment updated: ${comment.id}`
+        })
+      }),
+      deps.eventListen(CommentEvents.Deleted, async ({ payload }) => {
+        const comment = payload.comment
+        await deps.saveStreamActivity({
+          streamId: comment.streamId,
+          resourceType: StreamResourceTypes.Comment,
+          resourceId: comment.parentComment || comment.id,
+          actionType: StreamActionTypes.Comment.Delete,
+          userId: payload.userId ?? comment.authorId,
+          info: bcfChangeInfo(comment),
+          message: `Comment deleted: ${comment.id}`
+        })
       })
     ]
 

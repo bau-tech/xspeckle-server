@@ -1,0 +1,60 @@
+Export native rectangular wall openings (OST_SWallRectOpening) as proxies.
+
+Openings placed with Revit's Opening tool were not a recovered category, so
+the hole they cut never reached the export and their walls stayed whole
+(three in a user's Revit 2025 model, 0.2 x 1.67 m and 0.3 x 1.91 m, each
+record box exactly the wall's thickness). The category is now recovered
+like a generic model and exported as an IfcBuildingElementProxy named
+`WallOpening-<ElementId>` with its record box, for a consumer to cut from
+the wall it crosses (the file importer's void_families.py does).
+
+--- a/src/partition_element_records.rs
++++ b/src/partition_element_records.rs
+@@ -222,6 +222,11 @@
+ pub const OST_STRUCTURAL_FOUNDATION: i64 = -2_001_300;
+ /// Autodesk `BuiltInCategory.OST_GenericModel`.
+ pub const OST_GENERIC_MODEL: i64 = -2_000_151;
++/// Autodesk `BuiltInCategory.OST_SWallRectOpening` -- a rectangular wall
++/// opening placed with Revit's Opening tool. Its record box is the hole it
++/// cuts (wall thickness x width x height); it is exported as a proxy named
++/// `WallOpening` for a consumer to cut from the wall it crosses.
++pub const OST_SWALL_RECT_OPENING: i64 = -2_000_997;
+ 
+ // RE-37: fixtures, site and circulation categories. Scored like RE-33's,
+ // against the `Tag` sets of Revit's own exports, with the ids of RE-35.
+@@ -305,7 +310,8 @@
+ /// RE-39 adds stairs with their runs, landings and stringers, and roofs.
+ /// RE-40 adds slab edges, once elements in non-primary design options are
+ /// left out: all 59 exported on Snowdon Towers are Revit's.
+-pub const PRODUCT_RECORD_CATEGORIES: [(i64, &str); 38] = [
++pub const PRODUCT_RECORD_CATEGORIES: [(i64, &str); 39] = [
++    (OST_SWALL_RECT_OPENING, "WallOpening"),
+     (OST_FURNITURE, "Furniture"),
+     (OST_CASEWORK, "Casework"),
+     (OST_PLUMBING_FIXTURES, "PlumbingFixture"),
+@@ -1237,7 +1243,8 @@
+ /// The categories the exporter recovers instances of, with the class name
+ /// each is decoded as: the architectural core plus
+ /// [`PRODUCT_RECORD_CATEGORIES`].
+-pub const RECOVERED_CATEGORIES: [(i64, &str); 45] = [
++pub const RECOVERED_CATEGORIES: [(i64, &str); 46] = [
++    (OST_SWALL_RECT_OPENING, "WallOpening"),
+     (OST_WALLS, "Wall"),
+     (OST_DOORS, "Door"),
+     (OST_WINDOWS, "Window"),
+--- a/src/ifc/category_map.rs
++++ b/src/ifc/category_map.rs
+@@ -359,6 +359,13 @@
+         ifc_type: "IFCBUILDINGELEMENTPROXY",
+         predefined_type: None,
+     },
++    // A native rectangular wall opening: its record box, as a proxy, for a
++    // consumer to cut from the wall it crosses.
++    Mapping {
++        revit_class: "WallOpening",
++        ifc_type: "IFCBUILDINGELEMENTPROXY",
++        predefined_type: None,
++    },
+     // RE-37: the entities Revit's own IFC4 export writes for these
+     // categories on Snowdon Towers (air terminals from the IFC4 subtype of
+     // the IFC2x3 `IfcFlowTerminal` Revit writes on RE1 Mechanical).

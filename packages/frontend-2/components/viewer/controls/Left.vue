@@ -47,9 +47,12 @@
           )
         "
         :active="activePanel === 'discussions'"
-        :icon="MessageSquareText"
         @click="toggleActivePanel('discussions')"
-      />
+      >
+        <!-- Official buildingSMART BCF icon -->
+        <!-- BCF icon © buildingSMART International, CC BY-ND 4.0 (see THIRD_PARTY_NOTICES.md) -->
+        <img src="/images/bcf-icon.png" alt="BCF" class="size-5 object-contain" />
+      </ViewerControlsButtonToggle>
 
       <!-- Saved views -->
       <ViewerControlsButtonToggle
@@ -207,7 +210,6 @@ import {
   BookOpen,
   Box,
   ListFilter,
-  MessageSquareText,
   CircleQuestionMark
 } from 'lucide-vue-next'
 import { useViewerPanelsUtilities } from '~/lib/viewer/composables/setup/panels'

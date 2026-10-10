@@ -139,7 +139,7 @@ graphql(`
     previewUrl
     referencedObject
     sourceApplication
-    commentThreadCount: commentThreads(limit: 0) {
+    commentThreadCount: topics(limit: 0) {
       totalCount
     }
     ...ProjectModelPageDialogDeleteVersion

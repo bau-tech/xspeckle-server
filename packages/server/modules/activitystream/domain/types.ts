@@ -6,7 +6,7 @@ import type {
 import type {
   CommentCreateInput,
   CreateCommentInput,
-  CreateCommentReplyInput,
+  CreateTopicInput,
   ReplyCreateInput
 } from '@/modules/core/graph/generated/graphql'
 import type { StreamRecord, UserRecord } from '@/modules/core/helpers/types'
@@ -151,6 +151,6 @@ export type ActivitySummary = {
 
 export type CommentCreatedActivityInput =
   | CommentCreateInput
-  | (CreateCommentInput & { resolvedResourceItems?: ViewerResourceItem[] })
+  | (CreateTopicInput & { resolvedResourceItems?: ViewerResourceItem[] })
 
-export type ReplyCreatedActivityInput = ReplyCreateInput | CreateCommentReplyInput
+export type ReplyCreatedActivityInput = ReplyCreateInput | CreateCommentInput

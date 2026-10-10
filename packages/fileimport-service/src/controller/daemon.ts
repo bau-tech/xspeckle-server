@@ -224,8 +224,8 @@ async function doTask(
           taskLogger,
           process.env['PYTHON_BINARY_PATH'] || 'python3',
           [
-            '-m',
-            'speckleifc',
+            '-u',
+            './src/ifc-python/import_file.py',
             TMP_FILE_PATH,
             TMP_RESULTS_PATH,
             info.streamId,
@@ -233,9 +233,7 @@ async function doTask(
             existingBranch?.id || ''
           ],
           {
-            USER_TOKEN: tempUserToken,
-            //speckleifc is not installed to sys (e.g. via pip), so we need to point it to the directory explicitly
-            PYTHONPATH: '/speckle-server/speckleifc/src/'
+            USER_TOKEN: tempUserToken
           },
           TIME_LIMIT,
           TMP_RESULTS_PATH
@@ -256,6 +254,94 @@ async function doTask(
           info.id,
           existingBranch?.id || '',
           regionName
+        ],
+        {
+          USER_TOKEN: tempUserToken
+        },
+        TIME_LIMIT,
+        TMP_RESULTS_PATH
+      )
+    } else if (info.fileType.toLowerCase() === 'rvt') {
+      await runProcessWithTimeout(
+        taskLogger,
+        process.env['PYTHON_BINARY_PATH'] || 'python3',
+        [
+          '-u',
+          './src/rvt/import_file.py',
+          TMP_FILE_PATH,
+          TMP_RESULTS_PATH,
+          info.userId,
+          info.streamId,
+          info.branchName,
+          `File upload: ${info.fileName}`,
+          info.id,
+          existingBranch?.id || '',
+          regionName
+        ],
+        {
+          USER_TOKEN: tempUserToken
+        },
+        TIME_LIMIT,
+        TMP_RESULTS_PATH
+      )
+    } else if (info.fileType.toLowerCase() === 'skp') {
+      await runProcessWithTimeout(
+        taskLogger,
+        process.env['PYTHON_BINARY_PATH'] || 'python3',
+        [
+          '-u',
+          './src/skp/import_file.py',
+          TMP_FILE_PATH,
+          TMP_RESULTS_PATH,
+          info.userId,
+          info.streamId,
+          info.branchName,
+          `File upload: ${info.fileName}`,
+          info.id,
+          existingBranch?.id || '',
+          regionName
+        ],
+        {
+          USER_TOKEN: tempUserToken
+        },
+        TIME_LIMIT,
+        TMP_RESULTS_PATH
+      )
+    } else if (info.fileType.toLowerCase() === '3dm') {
+      await runProcessWithTimeout(
+        taskLogger,
+        process.env['PYTHON_BINARY_PATH'] || 'python3',
+        [
+          '-u',
+          './src/rhino/import_file.py',
+          TMP_FILE_PATH,
+          TMP_RESULTS_PATH,
+          info.userId,
+          info.streamId,
+          info.branchName,
+          `File upload: ${info.fileName}`,
+          info.id,
+          existingBranch?.id || '',
+          regionName
+        ],
+        {
+          USER_TOKEN: tempUserToken
+        },
+        TIME_LIMIT,
+        TMP_RESULTS_PATH
+      )
+    } else if (info.fileType.toLowerCase() === 'ifczip') {
+      await runProcessWithTimeout(
+        taskLogger,
+        process.env['PYTHON_BINARY_PATH'] || 'python3',
+        [
+          '-u',
+          './src/ifczip/import_file.py',
+          TMP_FILE_PATH,
+          TMP_RESULTS_PATH,
+          info.streamId,
+          `File upload: ${info.fileName}`,
+          existingBranch?.id || ''
         ],
         {
           USER_TOKEN: tempUserToken

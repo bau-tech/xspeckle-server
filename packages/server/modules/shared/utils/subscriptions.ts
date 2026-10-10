@@ -5,7 +5,7 @@ import Redis from 'ioredis'
 import { withFilter } from 'graphql-subscriptions'
 import type { GraphQLContext } from '@/modules/shared/helpers/typeHelper'
 import type {
-  ProjectCommentsUpdatedMessage,
+  ProjectTopicsUpdatedMessage,
   ProjectFileImportUpdatedMessage,
   ProjectModelsUpdatedMessage,
   ProjectPendingModelsUpdatedMessage,
@@ -66,7 +66,7 @@ import type {
   ProjectGraphQLReturn,
   VersionGraphQLReturn
 } from '@/modules/core/helpers/graphTypes'
-import type { CommentGraphQLReturn } from '@/modules/comments/helpers/graphTypes'
+import type { TopicGraphQLReturn } from '@/modules/comments/helpers/graphTypes'
 import type { FileUploadGraphQLReturn } from '@/modules/fileuploads/helpers/types'
 import type {
   ProjectTriggeredAutomationsStatusUpdatedMessageGraphQLReturn,
@@ -236,8 +236,8 @@ type SubscriptionTypeMap = {
   [ProjectSubscriptions.ProjectCommentsUpdated]: {
     payload: {
       projectCommentsUpdated: Merge<
-        ProjectCommentsUpdatedMessage,
-        { comment: Nullable<CommentGraphQLReturn> }
+        ProjectTopicsUpdatedMessage,
+        { topic: Nullable<TopicGraphQLReturn> }
       >
       projectId: string
       resourceItems: ViewerResourceItem[]

@@ -7,8 +7,7 @@
       class="flex flex-col sm:flex-row sm:items-center flex-grow overflow-hidden space-x-3 mt-3 sm:mt-0"
     >
       <div class="flex items-center flex-none space-x-1">
-        <UserAvatarGroup v-if="!thread.archived" :users="allAvatars" :max-count="4" />
-        <CheckCircleIcon v-else class="w-8 h-8 text-primary" />
+        <UserAvatarGroup :users="allAvatars" :max-count="4" />
         <span class="text-heading-sm">
           {{ thread.author.name }}
           <template v-if="threadAuthors.length !== 1">
@@ -46,7 +45,6 @@ import { times } from 'lodash-es'
 import type { ProjectPageLatestItemsCommentItemFragment } from '~~/lib/common/generated/gql/graphql'
 import { useCommentScreenshotImage } from '~~/lib/projects/composables/previewImage'
 import { getLightLinkToThread } from '~~/lib/viewer/helpers/comments'
-import { CheckCircleIcon } from '@heroicons/vue/24/solid'
 import type { AvatarUserWithId } from '@speckle/ui-components'
 
 const props = defineProps<{

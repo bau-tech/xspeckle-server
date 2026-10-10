@@ -9,7 +9,7 @@
           <span class="sr-only">Open notifications menu</span>
           <div class="relative">
             <div
-              v-if="!menuOpen && hasNotifications"
+              v-if="!menuOpen && hasUnread"
               class="absolute -top-[4px] -right-[4px] size-2 bg-danger rounded-full"
             />
 
@@ -29,7 +29,27 @@
         <MenuItems
           class="absolute z-50 right-0 md:right-20 top-10 mt-1.5 w-full sm:w-72 origin-top-right bg-foundation outline outline-2 outline-primary-muted rounded-md shadow-lg overflow-hidden pb-1"
         >
-          <div class="px-3.5 pt-2 text-body-xs font-medium">Notifications</div>
+          <div class="flex items-center justify-between gap-2 px-3.5 pt-2">
+            <span class="text-body-xs font-medium">Notifications</span>
+            <div class="flex items-center gap-2">
+              <button
+                v-if="unreadCount"
+                type="button"
+                class="text-body-3xs text-foreground-2 hover:text-foreground"
+                @click="markAllRead"
+              >
+                Mark all read
+              </button>
+              <button
+                v-if="hasReadNotifications"
+                type="button"
+                class="text-body-3xs text-foreground-2 hover:text-danger"
+                @click="clearRead"
+              >
+                Clear read
+              </button>
+            </div>
+          </div>
           <p
             v-if="!hasNotifications"
             class="px-3.5 pt-2 pb-2.5 text-body-xs text-foreground-2 text-center"
@@ -45,6 +65,14 @@
           >
             <HeaderNavNotificationsWorkspaceInvite :invite="workspacesInvite" />
           </MenuItem>
+          <div v-if="userNotifications.length" class="max-h-96 overflow-y-auto">
+            <MenuItem v-for="notification in userNotifications" :key="notification.id">
+              <HeaderNavNotificationsUserNotification
+                :notification="notification"
+                @open="openNotification"
+              />
+            </MenuItem>
+          </div>
         </MenuItems>
       </Transition>
     </Menu>
@@ -53,9 +81,17 @@
 <script setup lang="ts">
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue'
 import { XMarkIcon, BellIcon } from '@heroicons/vue/24/outline'
-import { useQuery } from '@vue/apollo-composable'
+import { useMutation, useQuery } from '@vue/apollo-composable'
+import type { HeaderNavNotificationsUserNotification_UserNotificationFragment } from '~~/lib/common/generated/gql/graphql'
+import { threadRedirectRoute } from '~~/lib/common/helpers/route'
+import {
+  clearReadUserNotificationsMutation,
+  markAllUserNotificationsReadMutation,
+  markUserNotificationsReadMutation
+} from '~~/lib/navigation/graphql/mutations'
 import {
   navigationProjectInvitesQuery,
+  navigationUserNotificationsQuery,
   navigationWorkspaceInvitesQuery
 } from '~~/lib/navigation/graphql/queries'
 
@@ -85,7 +121,56 @@ const workspacesInvites = computed(() => {
   )
 })
 
+// Same 20s poll as the external BCF server's bell -- new ones can arrive any time
+const { result: userNotificationsResult, refetch: refetchUserNotifications } = useQuery(
+  navigationUserNotificationsQuery,
+  null,
+  () => ({
+    pollInterval: import.meta.client ? 20000 : undefined
+  })
+)
+const { mutate: markRead } = useMutation(markUserNotificationsReadMutation)
+const { mutate: markAllReadMutate } = useMutation(markAllUserNotificationsReadMutation)
+const { mutate: clearReadMutate } = useMutation(clearReadUserNotificationsMutation)
+
+const userNotifications = computed(
+  () => userNotificationsResult.value?.activeUser?.notifications || []
+)
+const unreadCount = computed(
+  () => userNotificationsResult.value?.activeUser?.unreadNotificationCount || 0
+)
+const hasReadNotifications = computed(() => userNotifications.value.some((n) => n.read))
+
+const openNotification = async (
+  notification: HeaderNavNotificationsUserNotification_UserNotificationFragment
+) => {
+  if (!notification.read) await markRead({ ids: [notification.id] })
+  await refetchUserNotifications()
+  if (notification.projectId && notification.topicId) {
+    await navigateTo(threadRedirectRoute(notification.projectId, notification.topicId))
+  }
+}
+
+const markAllRead = async () => {
+  await markAllReadMutate()
+  await refetchUserNotifications()
+}
+
+const clearRead = async () => {
+  await clearReadMutate()
+  await refetchUserNotifications()
+}
+
 const hasNotifications = computed(
-  () => projectsInvites.value?.length || workspacesInvites.value?.length
+  () =>
+    projectsInvites.value?.length ||
+    workspacesInvites.value?.length ||
+    userNotifications.value.length
+)
+const hasUnread = computed(
+  () =>
+    projectsInvites.value?.length ||
+    workspacesInvites.value?.length ||
+    unreadCount.value
 )
 </script>

@@ -1,0 +1,2 @@
+# git apply needs these byte-exact (LF), whatever the checkout platform
+packages/fileimport-service/src/rvt/rvt-rs-patches/*.patch text eol=lf

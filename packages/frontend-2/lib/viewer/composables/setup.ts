@@ -34,7 +34,7 @@ import type {
   ViewerLoadedThreadsQuery,
   ViewerResourceItem,
   ViewerLoadedThreadsQueryVariables,
-  ProjectCommentsFilter,
+  ProjectTopicsFilter,
   ViewerModelVersionCardItemFragment,
   UseViewerSavedViewSetup_SavedViewFragment,
   ProjectViewerResourcesQuery
@@ -106,7 +106,7 @@ export type LoadedModel = NonNullable<
   Get<ViewerLoadedResourcesQuery, 'project.models.items[0]'>
 >
 export type LoadedThreadsMetadata = NonNullable<
-  Get<ViewerLoadedThreadsQuery, 'project.commentThreads'>
+  Get<ViewerLoadedThreadsQuery, 'project.topics'>
 >
 export type LoadedCommentThread = NonNullable<Get<LoadedThreadsMetadata, 'items[0]'>>
 type LoadedSavedView = UseViewerSavedViewSetup_SavedViewFragment
@@ -211,7 +211,7 @@ export type InjectableViewerState = Readonly<{
       /**
        * Writable computed for reading/writing current thread filters
        */
-      threadFilters: Ref<Omit<ProjectCommentsFilter, 'resourceIdString'>>
+      threadFilters: Ref<Omit<ProjectTopicsFilter, 'resourceIdString'>>
 
       /**
        * Helper for switching model to a specific version (or just latest)
@@ -1066,14 +1066,13 @@ function setupResponseResourceData(
   )
 
   const commentThreadsMetadata = computed(
-    () => viewerLoadedThreadsResult.value?.project?.commentThreads
+    () => viewerLoadedThreadsResult.value?.project?.topics
   )
   const commentThreads = computed(() => commentThreadsMetadata.value?.items || [])
 
   onViewerLoadedThreadsError((err) => {
     // Show full page error only if serious error (core data couldn't be loaded)
-    const isWorkingLoad =
-      !!viewerLoadedThreadsResult.value?.project.commentThreads.items
+    const isWorkingLoad = !!viewerLoadedThreadsResult.value?.project.topics.items
     if (isWorkingLoad) {
       return
     }

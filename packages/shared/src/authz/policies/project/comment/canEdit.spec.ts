@@ -98,15 +98,38 @@ describe('canEditProjectCommentPolicy', () => {
     expect(result).toBeOKResult()
   })
 
-  it('fails if not the author, even if admin', async () => {
+  it('succeeds if not the author, w/ explicit project role (BCF: any member edits)', async () => {
     const sut = buildSUT({
       getComment: getCommentFake({
         id: 'comment-id',
         projectId: 'project-id',
         authorId: 'other-user-id'
+      })
+    })
+
+    const result = await sut({
+      userId: 'user-id',
+      projectId: 'project-id',
+      commentId: 'comment-id'
+    })
+
+    expect(result).toBeOKResult()
+  })
+
+  it('fails if not the author and w/o project role, even if public comments allowed', async () => {
+    const sut = buildSUT({
+      getProject: getProjectFake({
+        id: 'project-id',
+        workspaceId: null,
+        visibility: ProjectVisibility.Public,
+        allowPublicComments: true
       }),
-      getServerRole: async () => Roles.Server.Admin,
-      getProjectRole: async () => Roles.Stream.Owner
+      getProjectRole: async () => null,
+      getComment: getCommentFake({
+        id: 'comment-id',
+        projectId: 'project-id',
+        authorId: 'other-user-id'
+      })
     })
 
     const result = await sut({
@@ -265,16 +288,13 @@ describe('canEditProjectCommentPolicy', () => {
       expect(result).toBeOKResult()
     })
 
-    it('fails if not the author, even if admin', async () => {
-      const sut = buildSUT({
+    it('fails if not the author and only an implicit (workspace) project role', async () => {
+      const sut = buildWorkspaceSUT({
         getComment: getCommentFake({
           id: 'comment-id',
           projectId: 'project-id',
           authorId: 'other-user-id'
-        }),
-        getServerRole: async () => Roles.Server.Admin,
-        getProjectRole: async () => Roles.Stream.Owner,
-        getWorkspaceRole: async () => Roles.Workspace.Admin
+        })
       })
 
       const result = await sut({

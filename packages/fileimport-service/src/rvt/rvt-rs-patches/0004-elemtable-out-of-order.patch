@@ -1,0 +1,45 @@
+Read Global/ElemTable when a few of its records are out of order.
+
+detect_layout takes the record size (40 or 28 bytes) at which the stated
+number of records fits with ids rising over the whole table, and falls back
+to a 12-byte layout otherwise. A Revit 2025 edition of Autodesk's Snowdon
+Towers Structural keeps its table at 40 bytes, ending exactly where every
+other 40-byte table does, but 2 of its 16,767 records sit a few hundred
+ids below their predecessor (records 5317 and 5377). The fallback's ids
+are not the file's, so 19,805 of 19,815 partition records had an
+undeclared id and all 2,230 model elements were dropped (reported as
+element_record_without_element_id) -- the file exported nothing.
+
+A size is now accepted when its ids rise on all but count/1000 (at least
+2) steps, and the size with the fewest descents wins. The wrong sizes
+descend on more than half their steps (10,679 of 16,766 at 28 bytes on
+that file), so they stay rejected. Snowdon Structural 2025 now exports
+1,282 building elements (942 beams, 920 of them on their axes); tables
+whose ids all rise are read as before.
+
+diff --git a/src/elem_table.rs b/src/elem_table.rs
+index 5d72b0d..27b6b59 100644
+--- a/src/elem_table.rs
++++ b/src/elem_table.rs
+@@ -201,11 +201,19 @@ pub fn detect_layout(d: &[u8]) -> ElemTableLayout {
+         }
+         Some((rises, d.len() - end))
+     };
++    // Revit keeps the table sorted, but not always strictly: a Revit 2025
++    // edition of Autodesk's Snowdon Towers Structural has 2 of its 16,767
++    // records a few hundred ids below their predecessor. Requiring every id
++    // to rise sent that file to the 12-byte fallback, whose ids are not the
++    // file's, and lost every element. A record size whose ids rise but for
++    // a handful of steps is still the table's; the wrong sizes descend on
++    // more than half of their steps (10,679 of 16,766 at 28 bytes there).
++    let allowed_descents = (count / 1000).max(2);
+     let best = [40usize, 28]
+         .into_iter()
+         .filter_map(|stride| rising(stride).map(|(rises, tail)| (stride, rises, tail)))
+-        .filter(|&(_, rises, _)| rises + 1 == count)
+-        .min_by_key(|&(_, _, tail)| tail);
++        .filter(|&(_, rises, _)| rises + 1 + allowed_descents >= count)
++        .min_by_key(|&(_, rises, tail)| (count - 1 - rises, tail));
+     let Some((stride, _, _)) = best else {
+         return fallback;
+     };

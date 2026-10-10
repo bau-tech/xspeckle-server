@@ -1,0 +1,146 @@
+Floor and roof outlines on Revit 2025 (sketch curve lists, span-direction
+lines, arc box tolerance).
+
+On Revit 2025 every floor came out as its record's bounding box, so floor
+contours and sketch holes were lost (two user models and Autodesk's
+rst_advanced 2025 sample among them). Three causes, each checked on those
+files:
+
+- scan_sketch_curve_lists read the Sketch's own curve list only on 2024.
+  The 2025 layout is the same (owner at +77 past the element-data header,
+  which partition_names already knows for 2025), so 2025 is listed too.
+- A floor's span-direction arrow is one of its sketch lines and 2025 lists
+  it with the boundary (a line straight across the floor, both ends free),
+  so the loop solve rejected the whole floor. Curves with an end no other
+  curve meets are dropped (repeatedly) before solving.
+- An outline with arcs must span the record box within 0.001 ft, but
+  Revit's record box comes from a coarse tessellation of the arc and stops
+  short of it (0.0046 ft on a 6.2 ft radius). Arc outlines get 0.01 ft.
+
+Drop this patch once upstream reads 2025 sketches itself.
+
+diff --git a/src/element_record_plan_profiles.rs b/src/element_record_plan_profiles.rs
+index 644d615..0cc460f 100644
+--- a/src/element_record_plan_profiles.rs
++++ b/src/element_record_plan_profiles.rs
+@@ -894,7 +894,7 @@ pub fn scan_sketch_curve_lists(
+     revit_version: u32,
+     sketch_lines: &std::collections::BTreeSet<u32>,
+ ) -> BTreeMap<u32, Vec<u32>> {
+-    if revit_version != 2024 || sketch_lines.is_empty() {
++    if !matches!(revit_version, 2024 | 2025) || sketch_lines.is_empty() {
+         return BTreeMap::new();
+     }
+     let Some(header) = crate::partition_names::element_data_header(revit_version) else {
+diff --git a/src/partition_schema_mvp.rs b/src/partition_schema_mvp.rs
+index ff43cd2..bd8ffe5 100644
+--- a/src/partition_schema_mvp.rs
++++ b/src/partition_schema_mvp.rs
+@@ -5434,6 +5434,10 @@ pub fn slabs_from_partition_category_records(
+ /// its element's record box (RE-96), feet.
+ pub const SKETCH_BOX_TOLERANCE_FEET: f64 = 1e-3;
+ 
++/// [`SKETCH_BOX_TOLERANCE_FEET`] for an outline with arcs, whose record box
++/// Revit takes from a coarse tessellation of the arc, feet.
++pub const ARC_SKETCH_BOX_TOLERANCE_FEET: f64 = 1e-2;
++
+ /// Sketched plan profiles of the elements in `owners` (their plan record
+ /// boxes, `[min x, min y, max x, max y]`), from their Sketch's curve list
+ /// where it has one (RE-97) or else the lines naming them, and their
+@@ -5499,16 +5503,19 @@ fn sketch_plan_profiles(
+         })
+         .map(|(owner, _)| *owner)
+         .collect();
+-    let spans_box = |owner: u32, profile: &erpp::PlanProfile| {
++    let spans_box_within = |owner: u32, profile: &erpp::PlanProfile, tolerance: f64| {
+         owners.get(&owner).is_some_and(|plan_box| {
+             profile.plan_extent_feet().is_some_and(|extent| {
+                 extent
+                     .iter()
+                     .zip(plan_box)
+-                    .all(|(a, b)| (a - b).abs() <= SKETCH_BOX_TOLERANCE_FEET)
++                    .all(|(a, b)| (a - b).abs() <= tolerance)
+             })
+         })
+     };
++    let spans_box = |owner: u32, profile: &erpp::PlanProfile| {
++        spans_box_within(owner, profile, SKETCH_BOX_TOLERANCE_FEET)
++    };
+     let sketch_lines = remapped.as_slice();
+     let mut profiles = erpp::plan_profiles_from_sketch_line_records(sketch_lines);
+     profiles.retain(|owner, profile| !relisted.contains(owner) || spans_box(*owner, profile));
+@@ -5599,6 +5606,11 @@ fn sketch_plan_profiles(
+             })
+             .collect::<Option<Vec<(u32, Vec<[f64; 4]>, bool)>>>()
+             .map(|curves| {
++                // A floor's span-direction arrow is a line of its sketch too,
++                // and Revit 2025 lists it with the boundary: it ends nowhere on
++                // the loops. Drop curves with a free end, repeatedly, so only
++                // closed loops are solved.
++                let curves = without_open_curves(curves, eps);
+                 let has_arc = curves.iter().any(|(_, _, arc)| *arc);
+                 // RE-151: each line's first chord is an edge of its loop.
+                 let points = curves
+@@ -5621,7 +5633,11 @@ fn sketch_plan_profiles(
+         };
+         // RE-96: an outline with an arc spans the element's own record box,
+         // or the sketch holds curves that are not the element's edge.
+-        if !(has_arc || relisted.contains(&owner)) || spans_box(owner, &profile) {
++        // Revit's record box of an outline with arcs comes from a coarse
++        // tessellation and can stop short of the arc (a 6.2 ft radius arc: by
++        // 0.0046 ft on a 2025 floor), so arcs are held to ARC_SKETCH_BOX_TOLERANCE_FEET.
++        let tolerance = if has_arc { ARC_SKETCH_BOX_TOLERANCE_FEET } else { SKETCH_BOX_TOLERANCE_FEET };
++        if !(has_arc || relisted.contains(&owner)) || spans_box_within(owner, &profile, tolerance) {
+             erpp::tag_voids(&mut profile, &points);
+             profile.segment_ids = segments.keys().copied().collect();
+             profiles.insert(owner, profile);
+@@ -5630,6 +5646,49 @@ fn sketch_plan_profiles(
+     profiles
+ }
+ 
++/// The curves (`id`, chords, is-arc) of a sketch without those that have an
++/// end no other curve meets -- a span-direction arrow, a stray line -- dropped
++/// until every remaining end is shared. A curve closed on itself (a full
++/// circle) is kept.
++fn without_open_curves(
++    mut curves: Vec<(u32, Vec<[f64; 4]>, bool)>,
++    eps: f64,
++) -> Vec<(u32, Vec<[f64; 4]>, bool)> {
++    let near =
++        |p: (f64, f64), q: (f64, f64)| (p.0 - q.0).abs() <= eps && (p.1 - q.1).abs() <= eps;
++    loop {
++        let ends: Vec<Option<((f64, f64), (f64, f64))>> = curves
++            .iter()
++            .map(|(_, chords, _)| {
++                let (first, last) = (chords.first()?, chords.last()?);
++                Some(((first[0], first[1]), (last[2], last[3])))
++            })
++            .collect();
++        let shared = |index: usize, point: (f64, f64)| {
++            ends.iter().enumerate().any(|(other, ends)| match ends {
++                Some((start, end)) if other == index => near(*start, *end),
++                Some((start, end)) => near(point, *start) || near(point, *end),
++                None => false,
++            })
++        };
++        let keep: Vec<bool> = ends
++            .iter()
++            .enumerate()
++            .map(|(index, ends)| {
++                ends.is_some_and(|(start, end)| shared(index, start) && shared(index, end))
++            })
++            .collect();
++        if keep.iter().all(|keep| *keep) {
++            return curves;
++        }
++        curves = curves
++            .into_iter()
++            .zip(keep)
++            .filter_map(|(curve, keep)| keep.then_some(curve))
++            .collect();
++    }
++}
++
+ /// A sketch read from its lines' exact ends: the chords, whether any is an
+ /// arc's, and each line's ElementId with a point on its edge (RE-151).
+ type ExactSketch = (Vec<[f64; 4]>, bool, Vec<(u32, (f64, f64))>);

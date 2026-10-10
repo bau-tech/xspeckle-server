@@ -5,8 +5,7 @@ import {
   streamResourceCheckFactory,
   createCommentFactory,
   createCommentReplyFactory,
-  editCommentFactory,
-  archiveCommentFactory
+  editCommentFactory as editCommentLegacyFactory
 } from '@/modules/comments/services/index'
 import {
   checkStreamResourceAccessFactory,
@@ -26,7 +25,23 @@ import {
   markCommentUpdatedFactory,
   markCommentViewedFactory,
   resolvePaginatedProjectCommentsLatestModelResourcesFactory,
-  updateCommentFactory
+  updateCommentFactory,
+  assignNextTopicIndexFactory,
+  insertCommentRelatedTopicsFactory,
+  deleteCommentRelatedTopicsFactory,
+  getCommentRelatedTopicsFactory,
+  insertCommentDocumentReferencesFactory,
+  deleteCommentDocumentReferencesFactory,
+  getCommentDocumentReferencesFactory,
+  insertTopicViewpointFactory,
+  getTopicViewpointsFactory,
+  deleteTopicAndRepliesFactory,
+  getTopicViewpointByGuidFactory,
+  deleteTopicViewpointFactory,
+  nextTopicViewpointIndexFactory,
+  rekeyTopicViewpointFactory,
+  getCommentByGuidFactory,
+  getTopicIdsByGuidsFactory
 } from '@/modules/comments/repositories/comments'
 import {
   ensureCommentSchema,
@@ -55,8 +70,11 @@ import {
 import {
   createCommentThreadAndNotifyFactory,
   createCommentReplyAndNotifyFactory,
-  editCommentAndNotifyFactory,
-  archiveCommentAndNotifyFactory
+  createViewpointFactory,
+  deleteViewpointFactory,
+  deleteCommentAndNotifyFactory,
+  editTopicAndNotifyFactory,
+  editCommentAndNotifyFactory
 } from '@/modules/comments/services/management'
 import {
   isLegacyData,
@@ -65,6 +83,8 @@ import {
   convertStateToLegacyData,
   convertLegacyDataToStateFactory
 } from '@/modules/comments/services/data'
+import { viewpointRecordToGraphql } from '@/modules/comments/services/bcfViewpoint'
+import { CommentEvents } from '@/modules/comments/domain/events'
 import type { Resolvers } from '@/modules/core/graph/generated/graphql'
 import { ResourceType } from '@/modules/core/graph/generated/graphql'
 import type { GraphQLContext } from '@/modules/shared/helpers/typeHelper'
@@ -156,6 +176,44 @@ const getAuthorizedStreamCommentFactory =
     return comment
   }
 
+/**
+ * The acting user's BCF identity -- their email, as BCF servers identify
+ * people by email.
+ */
+const getActorIdentity = async (ctx: GraphQLContext) => {
+  if (!ctx.userId) return undefined
+  const user = await ctx.loaders.users.getUser.load(ctx.userId)
+  return user?.email || undefined
+}
+
+/**
+ * BCF identities are emails, which Speckle otherwise never shows to other
+ * users -- only a project collaborator gets them, not every reader of a
+ * public project.
+ */
+const canSeeBcfIdentities = async (parent: CommentRecord, ctx: GraphQLContext) =>
+  !!ctx.userId && !!(await ctx.loaders.streams.getRole.load(parent.streamId))
+
+const resolveBcfIdentity = async (
+  parent: CommentRecord,
+  value: string | null,
+  ctx: GraphQLContext
+) => ((await canSeeBcfIdentities(parent, ctx)) ? value : null)
+
+/** BCF creation_author, falling back to the author's email for old rows. */
+const resolveCreationAuthor = async (parent: CommentRecord, ctx: GraphQLContext) => {
+  if (!(await canSeeBcfIdentities(parent, ctx))) return null
+  if (parent.creationAuthor) return parent.creationAuthor
+  const user = await ctx.loaders.users.getUser.load(parent.authorId)
+  return user?.email || null
+}
+
+const resolveTopicViewpoints = async (topic: CommentRecord) => {
+  const projectDb = await getProjectDbClient({ projectId: topic.streamId })
+  const rows = await getTopicViewpointsFactory({ db: projectDb })(topic.id)
+  return rows.map(viewpointRecordToGraphql)
+}
+
 export default {
   Query: {
     async comment(_parent, args, context) {
@@ -191,8 +249,8 @@ export default {
       }
     }
   },
-  Comment: {
-    async replies(parent, args, ctx) {
+  Topic: {
+    async comments(parent, args, ctx) {
       const projectId = parent.streamId
       const projectDb = await getProjectDbClient({ projectId })
 
@@ -217,7 +275,7 @@ export default {
       })
     },
     /**
-     * Format comment.text for output, since it can have multiple formats
+     * Format topic.text (BCF description) for output, since it can have multiple formats
      */
     async text(parent, _args, ctx) {
       const project = await ctx.loaders.streams.getStream.load(parent.streamId)
@@ -262,16 +320,49 @@ export default {
       const { doc } = ensureCommentSchema(parent.text || '')
       return documentToBasicString(doc)
     },
-    async hasParent(parent) {
-      return !!parent.parentComment
-    },
-    async parent(parent, _args, ctx) {
+    labels: (parent) => parent.labels || [],
+    index: (parent) => parent.index || 0,
+    serverAssignedId: (parent) => String(parent.index || 0),
+    creationAuthor: (parent, _args, ctx) => resolveCreationAuthor(parent, ctx),
+    creationDate: (parent) => parent.createdAt,
+    modifiedAuthor: (parent, _args, ctx) =>
+      resolveBcfIdentity(parent, parent.modifiedAuthor, ctx),
+    referenceLinks: (parent) => parent.referenceLinks || [],
+    bimSnippet: (parent) =>
+      parent.bimSnippet
+        ? {
+            snippetType: parent.bimSnippet.snippet_type,
+            isExternal: parent.bimSnippet.is_external,
+            reference: parent.bimSnippet.reference,
+            referenceSchema: parent.bimSnippet.reference_schema
+          }
+        : null,
+    async relatedTopics(parent, _args, ctx) {
       const projectId = parent.streamId
       const projectDb = await getProjectDbClient({ projectId })
-
-      return ctx.loaders
-        .forRegion({ db: projectDb })
-        .comments.getReplyParent.load(parent.id)
+      const getCommentRelatedTopics = getCommentRelatedTopicsFactory({ db: projectDb })
+      const rows = await getCommentRelatedTopics(parent.id)
+      if (!rows.length) return []
+      const getComment = getCommentFactory({ db: projectDb })
+      const topics = await Promise.all(
+        rows.map((r) => getComment({ id: r.relatedTopicId, userId: ctx.userId }))
+      )
+      return topics.filter((t): t is NonNullable<typeof t> => !!t)
+    },
+    async documentReferences(parent) {
+      const projectId = parent.streamId
+      const projectDb = await getProjectDbClient({ projectId })
+      const getCommentDocumentReferences = getCommentDocumentReferencesFactory({
+        db: projectDb
+      })
+      return await getCommentDocumentReferences(parent.id)
+    },
+    async viewpoint(parent) {
+      const [first] = await resolveTopicViewpoints(parent)
+      return first || null
+    },
+    async viewpoints(parent) {
+      return await resolveTopicViewpoints(parent)
     },
     /**
      * Resolve resources, if they weren't already preloaded
@@ -301,7 +392,7 @@ export default {
     async author(parent, _args, ctx) {
       return ctx.loaders.users.getUser.load(parent.authorId)
     },
-    async replyAuthors(parent, args, ctx) {
+    async commentAuthors(parent, args, ctx) {
       const projectId = parent.streamId
       const projectDb = await getProjectDbClient({ projectId })
 
@@ -385,13 +476,88 @@ export default {
       return null
     }
   },
-  CommentReplyAuthorCollection: {
+  Comment: {
+    async comment(parent, _args, ctx) {
+      const project = await ctx.loaders.streams.getStream.load(parent.streamId)
+
+      if (!project) {
+        throw new StreamNotFoundError('Project not found', {
+          info: { streamId: parent.streamId }
+        })
+      }
+
+      const isBeyondLimit = await isCreatedBeyondHistoryLimitCutoffFactory({ ctx })({
+        entity: parent,
+        limitType: 'commentHistory',
+        project
+      })
+      if (isBeyondLimit) return null
+
+      return {
+        ...ensureCommentSchema(parent.text || ''),
+        projectId: parent.streamId
+      }
+    },
+    async rawComment(parent, _args, ctx) {
+      const project = await ctx.loaders.streams.getStream.load(parent.streamId)
+
+      if (!project) {
+        throw new StreamNotFoundError('Project not found', {
+          info: { streamId: parent.streamId }
+        })
+      }
+
+      const isBeyondLimit = await isCreatedBeyondHistoryLimitCutoffFactory({ ctx })({
+        entity: parent,
+        limitType: 'commentHistory',
+        project
+      })
+      if (isBeyondLimit) return null
+
+      const { doc } = ensureCommentSchema(parent.text || '')
+      return documentToBasicString(doc)
+    },
+    topicId: (parent) => parent.parentComment!,
+    async topic(parent, _args, ctx) {
+      const projectId = parent.streamId
+      const projectDb = await getProjectDbClient({ projectId })
+
+      return await ctx.loaders
+        .forRegion({ db: projectDb })
+        .comments.getReplyParent.load(parent.id)
+    },
+    async viewpoint(parent) {
+      if (!parent.viewpointGuid || !parent.parentComment) return null
+      const projectDb = await getProjectDbClient({ projectId: parent.streamId })
+      const row = await getTopicViewpointByGuidFactory({ db: projectDb })({
+        topicId: parent.parentComment,
+        guid: parent.viewpointGuid
+      })
+      return row ? viewpointRecordToGraphql(row) : null
+    },
+    async viewerState(parent) {
+      const parentData = parent.data
+      if (!parentData) return null
+      if (isDataStruct(parentData)) {
+        return formatSerializedViewerState(parentData.state)
+      }
+      return null
+    },
+    async author(parent, _args, ctx) {
+      return ctx.loaders.users.getUser.load(parent.authorId)
+    },
+    creationAuthor: (parent, _args, ctx) => resolveCreationAuthor(parent, ctx),
+    creationDate: (parent) => parent.createdAt,
+    modifiedAuthor: (parent, _args, ctx) =>
+      resolveBcfIdentity(parent, parent.modifiedAuthor, ctx)
+  },
+  CommentAuthorCollection: {
     async items(parent, _args, ctx) {
       return await ctx.loaders.users.getUser.loadMany(parent.authorIds)
     }
   },
   Project: {
-    async commentThreads(parent, args) {
+    async topics(parent, args) {
       const projectDb = await getProjectDbClient({ projectId: parent.id })
       const getPaginatedProjectComments = getPaginatedProjectCommentsFactory({
         resolvePaginatedProjectCommentsLatestModelResources:
@@ -415,7 +581,7 @@ export default {
         }
       })
     },
-    async comment(parent, args, context) {
+    async topic(parent, args, context) {
       const projectId = parent.id
       const projectDb = await getProjectDbClient({ projectId })
       const getStreamComment = getAuthorizedStreamCommentFactory({
@@ -426,10 +592,25 @@ export default {
         { streamId: parent.id, commentId: args.id },
         context
       )
+    },
+    async topicByGuid(parent, args, context) {
+      const canReadProject = await context.authPolicies.project.canRead({
+        userId: context.userId,
+        projectId: parent.id
+      })
+      throwIfAuthNotOk(canReadProject)
+      if (!/^[0-9a-f-]{36}$/i.test(args.guid)) return null
+
+      const projectDb = await getProjectDbClient({ projectId: parent.id })
+      const topic = await getCommentByGuidFactory({ db: projectDb })({
+        streamId: parent.id,
+        guid: args.guid.toLowerCase()
+      })
+      return topic && !topic.parentComment ? topic : null
     }
   },
   Version: {
-    async commentThreads(parent, args) {
+    async topics(parent, args) {
       const projectId = parent.streamId
       const projectDb = await getProjectDbClient({ projectId })
       const getPaginatedCommitComments = getPaginatedCommitCommentsFactory({
@@ -446,14 +627,13 @@ export default {
         ...args,
         commitId: parent.id,
         filter: {
-          includeArchived: false,
           threadsOnly: true
         }
       })
     }
   },
   Model: {
-    async commentThreads(parent, args) {
+    async topics(parent, args) {
       const projectId = parent.streamId
       const projectDb = await getProjectDbClient({ projectId })
 
@@ -471,7 +651,6 @@ export default {
         ...args,
         branchId: parent.id,
         filter: {
-          includeArchived: false,
           threadsOnly: true
         }
       })
@@ -524,7 +703,7 @@ export default {
       return await getResourceCommentCount({ resourceId: parent.id })
     }
   },
-  CommentMutations: {
+  TopicMutations: {
     async markViewed(_parent, args, ctx) {
       const canReadProject = await ctx.authPolicies.project.canRead({
         userId: ctx.userId,
@@ -534,7 +713,7 @@ export default {
 
       const projectDb = await getProjectDbClient({ projectId: args.input.projectId })
       const markCommentViewed = markCommentViewedFactory({ db: projectDb })
-      await markCommentViewed(args.input.commentId, ctx.userId!)
+      await markCommentViewed(args.input.topicId, ctx.userId!)
 
       return true
     },
@@ -571,19 +750,33 @@ export default {
         insertComments,
         insertCommentLinks,
         markCommentViewed,
+        assignNextTopicIndex: assignNextTopicIndexFactory({ db: projectDb }),
+        insertCommentRelatedTopics: insertCommentRelatedTopicsFactory({
+          db: projectDb
+        }),
+        insertCommentDocumentReferences: insertCommentDocumentReferencesFactory({
+          db: projectDb
+        }),
+        insertTopicViewpoint: insertTopicViewpointFactory({ db: projectDb }),
+        getCommentByGuid: getCommentByGuidFactory({ db: projectDb }),
+        getTopicIdsByGuids: getTopicIdsByGuidsFactory({ db: projectDb }),
         emitEvent: getEventBus().emit
       })
+      const actorIdentity = await getActorIdentity(ctx)
 
       return await withOperationLogging(
-        async () => await createCommentThreadAndNotify(args.input, ctx.userId!),
+        async () =>
+          await createCommentThreadAndNotify(args.input, ctx.userId!, {
+            actorIdentity
+          }),
         {
-          operationName: 'createCommentThread',
-          operationDescription: 'Create comment thread',
+          operationName: 'createTopic',
+          operationDescription: 'Create BCF topic',
           logger
         }
       )
     },
-    async reply(_parent, args, ctx) {
+    async comment(_parent, args, ctx) {
       const projectId = args.input.projectId
       const canCreateComment = await ctx.authPolicies.project.comment.canCreate({
         userId: ctx.userId,
@@ -615,19 +808,82 @@ export default {
         getViewerResourcesForComment: getViewerResourcesForCommentFactory({
           getCommentsResources: getCommentsResourcesFactory({ db: projectDb }),
           getViewerResourcesFromLegacyIdentifiers
-        })
+        }),
+        getCommentByGuid: getCommentByGuidFactory({ db: projectDb }),
+        getTopicViewpointByGuid: getTopicViewpointByGuidFactory({ db: projectDb }),
+        insertTopicViewpoint: insertTopicViewpointFactory({ db: projectDb }),
+        nextTopicViewpointIndex: nextTopicViewpointIndexFactory({ db: projectDb })
       })
+      const actorIdentity = await getActorIdentity(ctx)
 
       return await withOperationLogging(
-        async () => await createCommentReplyAndNotify(args.input, ctx.userId!),
+        async () =>
+          await createCommentReplyAndNotify(args.input, ctx.userId!, { actorIdentity }),
         {
-          operationName: 'replyToComment',
-          operationDescription: 'Reply to comment',
+          operationName: 'createComment',
+          operationDescription: 'Add a comment to a BCF topic',
           logger
         }
       )
     },
-    async edit(_parent, args, ctx) {
+    async update(_parent, args, ctx) {
+      const projectId = args.input.projectId
+      const topicId = args.input.topicId
+      const canEditComment = await ctx.authPolicies.project.comment.canEdit({
+        projectId,
+        userId: ctx.userId,
+        commentId: topicId
+      })
+      throwIfAuthNotOk(canEditComment)
+
+      const logger = ctx.log.child({
+        projectId,
+        streamId: projectId, //legacy
+        commentId: topicId
+      })
+
+      const projectDb = await getProjectDbClient({
+        projectId
+      })
+      const getComment = getCommentFactory({ db: projectDb })
+      const validateInputAttachments = validateInputAttachmentsFactory({
+        getBlobs: getBlobsFactory({ db: projectDb })
+      })
+      const updateComment = updateCommentFactory({ db: projectDb })
+
+      const editTopicAndNotify = editTopicAndNotifyFactory({
+        getComment,
+        validateInputAttachments,
+        updateComment,
+        deleteCommentRelatedTopics: deleteCommentRelatedTopicsFactory({
+          db: projectDb
+        }),
+        insertCommentRelatedTopics: insertCommentRelatedTopicsFactory({
+          db: projectDb
+        }),
+        deleteCommentDocumentReferences: deleteCommentDocumentReferencesFactory({
+          db: projectDb
+        }),
+        insertCommentDocumentReferences: insertCommentDocumentReferencesFactory({
+          db: projectDb
+        }),
+        getCommentByGuid: getCommentByGuidFactory({ db: projectDb }),
+        getTopicIdsByGuids: getTopicIdsByGuidsFactory({ db: projectDb }),
+        emitEvent: getEventBus().emit
+      })
+      const actorIdentity = await getActorIdentity(ctx)
+
+      return await withOperationLogging(
+        async () =>
+          await editTopicAndNotify(args.input, ctx.userId!, { actorIdentity }),
+        {
+          logger,
+          operationName: 'updateTopic',
+          operationDescription: 'Update BCF topic'
+        }
+      )
+    },
+    async updateComment(_parent, args, ctx) {
       const projectId = args.input.projectId
       const commentId = args.input.commentId
       const canEditComment = await ctx.authPolicies.project.comment.canEdit({
@@ -656,63 +912,174 @@ export default {
         getComment,
         validateInputAttachments,
         updateComment,
+        getTopicViewpointByGuid: getTopicViewpointByGuidFactory({ db: projectDb }),
+        getCommentByGuid: getCommentByGuidFactory({ db: projectDb }),
         emitEvent: getEventBus().emit
       })
+      const actorIdentity = await getActorIdentity(ctx)
 
       return await withOperationLogging(
-        async () => await editCommentAndNotify(args.input, ctx.userId!),
-        { logger, operationName: 'editComment', operationDescription: 'Edit comment' }
+        async () =>
+          await editCommentAndNotify(args.input, ctx.userId!, { actorIdentity }),
+        {
+          logger,
+          operationName: 'updateComment',
+          operationDescription: 'Update a comment'
+        }
       )
     },
-    async archive(_parent, args, ctx) {
+    async createViewpoint(_parent, args, ctx) {
       const projectId = args.input.projectId
-      const commentId = args.input.commentId
-      const canArchive = await ctx.authPolicies.project.comment.canArchive({
-        userId: ctx.userId,
+      const topicId = args.input.topicId
+      const canEditComment = await ctx.authPolicies.project.comment.canEdit({
         projectId,
-        commentId
+        userId: ctx.userId,
+        commentId: topicId
       })
-      throwIfAuthNotOk(canArchive)
+      throwIfAuthNotOk(canEditComment)
+
       const logger = ctx.log.child({
         projectId,
         streamId: projectId, //legacy
-        commentId
+        commentId: topicId
       })
 
-      const projectDb = await getProjectDbClient({
-        projectId
-      })
-      const getComment = getCommentFactory({ db: projectDb })
-      const getStream = getStreamFactory({ db: projectDb })
-      const updateComment = updateCommentFactory({ db: projectDb })
+      const projectDb = await getProjectDbClient({ projectId })
       const getViewerResourcesFromLegacyIdentifiers =
         buildGetViewerResourcesFromLegacyIdentifiers({ db: projectDb })
-      const getViewerResourcesForComment = getViewerResourcesForCommentFactory({
-        getCommentsResources: getCommentsResourcesFactory({ db: projectDb }),
-        getViewerResourcesFromLegacyIdentifiers
-      })
-      const archiveCommentAndNotify = archiveCommentAndNotifyFactory({
-        getComment,
-        getStream,
-        updateComment,
-        getViewerResourcesForComment,
+      const createViewpoint = createViewpointFactory({
+        getComment: getCommentFactory({ db: projectDb }),
+        getViewerResourcesForComment: getViewerResourcesForCommentFactory({
+          getCommentsResources: getCommentsResourcesFactory({ db: projectDb }),
+          getViewerResourcesFromLegacyIdentifiers
+        }),
+        insertTopicViewpoint: insertTopicViewpointFactory({ db: projectDb }),
+        nextTopicViewpointIndex: nextTopicViewpointIndexFactory({ db: projectDb }),
+        getTopicViewpointByGuid: getTopicViewpointByGuidFactory({ db: projectDb }),
+        markCommentUpdated: markCommentUpdatedFactory({ db: projectDb }),
         emitEvent: getEventBus().emit
       })
 
-      await withOperationLogging(
-        async () =>
-          await archiveCommentAndNotify(commentId, ctx.userId!, args.input.archived),
+      const row = await withOperationLogging(
+        async () => await createViewpoint(args.input, ctx.userId!),
         {
           logger,
-          operationName: 'archiveComment',
-          operationDescription: 'Archive comment'
+          operationName: 'createViewpoint',
+          operationDescription: 'Add a viewpoint to a BCF topic'
         }
       )
-      return true
+
+      return viewpointRecordToGraphql(row)
+    },
+    async deleteViewpoint(_parent, args, ctx) {
+      const { projectId, topicId } = args.input
+      const canEditComment = await ctx.authPolicies.project.comment.canEdit({
+        projectId,
+        userId: ctx.userId,
+        commentId: topicId
+      })
+      throwIfAuthNotOk(canEditComment)
+
+      const projectDb = await getProjectDbClient({ projectId })
+      const deleteViewpoint = deleteViewpointFactory({
+        getComment: getCommentFactory({ db: projectDb }),
+        deleteTopicViewpoint: deleteTopicViewpointFactory({ db: projectDb }),
+        markCommentUpdated: markCommentUpdatedFactory({ db: projectDb }),
+        emitEvent: getEventBus().emit
+      })
+      return await withOperationLogging(
+        async () => await deleteViewpoint(args.input, ctx.userId!),
+        {
+          logger: ctx.log.child({ projectId, streamId: projectId, commentId: topicId }),
+          operationName: 'deleteViewpoint',
+          operationDescription: 'Delete a viewpoint of a BCF topic'
+        }
+      )
+    },
+    async rekeyViewpoint(_parent, args, ctx) {
+      const { projectId, topicId, viewpointGuid, newGuid } = args.input
+      const canEditComment = await ctx.authPolicies.project.comment.canEdit({
+        projectId,
+        userId: ctx.userId,
+        commentId: topicId
+      })
+      throwIfAuthNotOk(canEditComment)
+      const uuid = /^[0-9a-f-]{36}$/i
+      if (!uuid.test(viewpointGuid) || !uuid.test(newGuid)) return false
+
+      const projectDb = await getProjectDbClient({ projectId })
+      return await rekeyTopicViewpointFactory({ db: projectDb })({
+        topicId,
+        guid: viewpointGuid.toLowerCase(),
+        newGuid: newGuid.toLowerCase()
+      })
+    },
+    async deleteComment(_parent, args, ctx) {
+      const { projectId, commentId } = args.input
+      const canEditComment = await ctx.authPolicies.project.comment.canEdit({
+        projectId,
+        userId: ctx.userId,
+        commentId
+      })
+      throwIfAuthNotOk(canEditComment)
+
+      const projectDb = await getProjectDbClient({ projectId })
+      const deleteCommentAndNotify = deleteCommentAndNotifyFactory({
+        getComment: getCommentFactory({ db: projectDb }),
+        deleteComment: deleteCommentFactory({ db: projectDb }),
+        markCommentUpdated: markCommentUpdatedFactory({ db: projectDb }),
+        emitEvent: getEventBus().emit
+      })
+      return await withOperationLogging(
+        async () => await deleteCommentAndNotify(args.input, ctx.userId!),
+        {
+          logger: ctx.log.child({ projectId, streamId: projectId, commentId }),
+          operationName: 'deleteComment',
+          operationDescription: 'Delete a comment of a BCF topic'
+        }
+      )
+    },
+    async delete(_parent, args, ctx) {
+      const projectId = args.input.projectId
+      const topicId = args.input.topicId
+      const canEditComment = await ctx.authPolicies.project.comment.canEdit({
+        projectId,
+        userId: ctx.userId,
+        commentId: topicId
+      })
+      throwIfAuthNotOk(canEditComment)
+
+      const logger = ctx.log.child({
+        projectId,
+        streamId: projectId, //legacy
+        commentId: topicId
+      })
+
+      const projectDb = await getProjectDbClient({ projectId })
+      const deleteTopicAndReplies = deleteTopicAndRepliesFactory({ db: projectDb })
+      const topic = await getCommentFactory({ db: projectDb })({ id: topicId })
+
+      return await withOperationLogging(
+        async () => {
+          const deleted = await deleteTopicAndReplies(topicId)
+          if (deleted && topic) {
+            await getEventBus().emit({
+              eventName: CommentEvents.Deleted,
+              payload: { comment: topic, userId: ctx.userId! }
+            })
+          }
+          return deleted
+        },
+        {
+          logger,
+          operationName: 'deleteTopic',
+          operationDescription: 'Delete a BCF topic'
+        }
+      )
     }
   },
   Mutation: {
-    commentMutations: () => ({}),
+    topicMutations: () => ({}),
     async broadcastViewerUserActivity(_parent, args, context) {
       const projectId = args.projectId
       const canBroadcastActivity =
@@ -841,7 +1208,7 @@ export default {
       })
 
       const projectDb = await getProjectDbClient({ projectId })
-      const editComment = editCommentFactory({
+      const editComment = editCommentLegacyFactory({
         getComment: getCommentFactory({ db: projectDb }),
         validateInputAttachments: validateInputAttachmentsFactory({
           getBlobs: getBlobsFactory({ db: projectDb })
@@ -869,41 +1236,6 @@ export default {
       const markCommentViewed = markCommentViewedFactory({ db: projectDb })
 
       await markCommentViewed(args.commentId, context.userId!)
-      return true
-    },
-
-    async commentArchive(_parent, args, context) {
-      const projectId = args.streamId
-      const commentId = args.commentId
-      const canArchive = await context.authPolicies.project.comment.canArchive({
-        userId: context.userId,
-        projectId,
-        commentId
-      })
-      throwIfAuthNotOk(canArchive)
-
-      const logger = context.log.child({
-        projectId,
-        streamId: projectId, //legacy
-        commentId
-      })
-
-      const projectDb = await getProjectDbClient({ projectId })
-      const archiveComment = archiveCommentFactory({
-        getComment: getCommentFactory({ db: projectDb }),
-        getStream,
-        updateComment: updateCommentFactory({ db: projectDb }),
-        emitEvent: getEventBus().emit
-      })
-      await withOperationLogging(
-        async () => await archiveComment({ ...args, userId: context.userId! }), // NOTE: permissions check inside service
-        {
-          logger,
-          operationName: 'archiveComment',
-          operationDescription: 'Archive comment'
-        }
-      )
-
       return true
     },
 

@@ -19,7 +19,7 @@ import type {
   CrossSyncCommitDownloadMetadataQuery,
   CrossSyncDownloadableCommitViewerThreadsQuery,
   CrossSyncProjectViewerResourcesQuery,
-  CreateCommentInput
+  CreateTopicInput
 } from '@/modules/core/graph/generated/graphql'
 import type { DownloadCommit } from '@/modules/cross-server-sync/domain/operations'
 import type {
@@ -131,20 +131,19 @@ const viewerResourcesQuery = gql`
 const viewerThreadsQuery = gql`
   query CrossSyncDownloadableCommitViewerThreads(
     $projectId: String!
-    $filter: ProjectCommentsFilter!
+    $filter: ProjectTopicsFilter!
     $cursor: String
     $limit: Int = 25
   ) {
     project(id: $projectId) {
       id
-      commentThreads(filter: $filter, cursor: $cursor, limit: $limit) {
+      topics(filter: $filter, cursor: $cursor, limit: $limit) {
         totalCount
-        totalArchivedCount
         items {
-          ...DownloadbleCommentMetadata
-          replies(limit: $limit) {
+          ...DownloadableTopicMetadata
+          comments(limit: $limit) {
             items {
-              ...DownloadbleCommentMetadata
+              ...DownloadableCommentMetadata
             }
           }
         }
@@ -152,13 +151,21 @@ const viewerThreadsQuery = gql`
     }
   }
 
-  fragment DownloadbleCommentMetadata on Comment {
+  fragment DownloadableTopicMetadata on Topic {
     id
     text {
       doc
     }
     viewerState
     screenshot
+  }
+
+  fragment DownloadableCommentMetadata on Comment {
+    id
+    comment {
+      doc
+    }
+    viewerState
   }
 `
 
@@ -334,7 +341,6 @@ const getViewerThreads = async (client: GraphQLClient, params: ParsedCommitUrl) 
       projectId: streamId,
       filter: {
         resourceIdString: `${branchId}@${commitId}`,
-        includeArchived: false,
         loadedVersionsOnly: true
       },
       limit: 100
@@ -342,7 +348,7 @@ const getViewerThreads = async (client: GraphQLClient, params: ParsedCommitUrl) 
   })
   assertValidGraphQLResult(results, 'Viewer Threads Query')
 
-  const threads = results.data?.project?.commentThreads?.items
+  const threads = results.data?.project?.topics?.items
   if (!threads) {
     throw new CrossServerCommitSyncError(
       'Unexpectedly received invalid viewer threads structure'
@@ -392,7 +398,7 @@ const saveNewThreadsFactory =
     const { commentAuthor, targetStream } = localResources
     if (!commentAuthor) return
 
-    const threadInputs: { originalComment: ViewerThread; input: CreateCommentInput }[] =
+    const threadInputs: { originalComment: ViewerThread; input: CreateTopicInput }[] =
       threads
         .filter((t) => !!t.text?.doc)
         .map((t) => ({
@@ -429,30 +435,30 @@ const saveNewThreadsFactory =
     for (const resItem of res) {
       const { originalData, newComment } = resItem
       const { originalComment } = originalData
-      const { replies } = originalComment
-      if (!replies) continue
+      const { comments } = originalComment
+      if (!comments) continue
 
       logger.info(
-        `Creating ${replies.items.length} new replies for comment thread ${originalComment.id}...`
+        `Creating ${comments.items.length} new comments for topic ${originalComment.id}...`
       )
       await Promise.all(
-        replies.items
-          .filter((i) => !!i.text?.doc)
+        comments.items
+          .filter((i) => !!i.comment?.doc)
           .map((r) =>
             deps.createCommentReplyAndNotify(
               {
                 content: {
-                  doc: r.text?.doc,
+                  doc: r.comment?.doc,
                   blobIds: []
                 },
-                threadId: newComment.id,
+                topicId: newComment.id,
                 projectId: targetStream.id
               },
               commentAuthor.id
             )
           )
       )
-      logger.info(`...created ${replies.items.length} new replies!`)
+      logger.info(`...created ${comments.items.length} new comments!`)
     }
   }
 

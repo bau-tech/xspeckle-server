@@ -1,0 +1,46 @@
+Expose saved display meshes to Python: write_ifc(saved_meshes=True).
+
+Upstream draws doors, windows, furniture and other family instances from
+the meshes Revit saved for display only behind `rvt-ifc --saved-meshes`
+(RE-78, #420); the Python binding has no way to ask for it, so every one of
+them comes through as its record's bounding box. Same logic as the CLI,
+minus its stderr report (the file importer logs stderr lines as errors).
+When the saved graphics cannot be read -- upstream's reader still declines
+Revit 2025 -- the export keeps its boxes. Drop this patch once the binding
+takes the option itself.
+
+diff --git a/rvt-py/src/lib.rs b/rvt-py/src/lib.rs
+index cfa9fec..828ef6b 100644
+--- a/rvt-py/src/lib.rs
++++ b/rvt-py/src/lib.rs
+@@ -647,10 +647,27 @@ impl PyRevitFile {
+     /// On synthetic / scaffold-only fixtures, only `scaffold`
+     /// typically succeeds; stronger modes raise `ValueError` until
+     /// real typed/geometry recovery is available.
+-    #[pyo3(signature = (mode = "scaffold"))]
+-    fn write_ifc(&mut self, mode: &str) -> PyResult<String> {
++    ///
++    /// `saved_meshes=True` draws every body that is only its element
++    /// record's bounding box from the mesh Revit saved for the element's
++    /// display, as `rvt-ifc --saved-meshes` does. When the saved graphics
++    /// cannot be read the export goes ahead with the boxes it has.
++    #[pyo3(signature = (mode = "scaffold", saved_meshes = false))]
++    fn write_ifc(&mut self, mode: &str, saved_meshes: bool) -> PyResult<String> {
+         let mode = parse_export_quality_mode(mode)?;
+-        write_ifc_with_quality_mode_and_limits(&mut self.inner, mode, self.walker_limits)
++        if !saved_meshes {
++            return write_ifc_with_quality_mode_and_limits(&mut self.inner, mode, self.walker_limits);
++        }
++        let result = ifc::RvtDocExporter
++            .export_with_diagnostics_mode_and_limits(&mut self.inner, mode, self.walker_limits)
++            .map_err(to_py_val)?;
++        let mut model = result.model;
++        let mut diagnostics = result.diagnostics;
++        if ifc::saved_meshes::attach(&mut self.inner, &mut model).is_ok() {
++            ifc::recount_exported(&mut diagnostics, &model);
++        }
++        mode.validate(&diagnostics).map_err(to_py_val)?;
++        Ok(ifc::write_step(&model))
+     }
+ 
+     /// Spreadsheet schedule of the decoded model as CSV text

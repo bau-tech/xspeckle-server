@@ -168,17 +168,13 @@ function createCache(): InMemoryCache {
             keyArgs: ['filter', 'limit'],
             merge: buildAbstractCollectionMergeFunction('VersionCollection')
           },
-          commentThreads: {
+          topics: {
             keyArgs: ['filter', 'limit'],
-            merge: buildAbstractCollectionMergeFunction('CommentCollection')
+            merge: buildAbstractCollectionMergeFunction('ProjectTopicCollection')
           },
           modelsTree: {
             keyArgs: ['filter', 'limit'],
             merge: buildAbstractCollectionMergeFunction('ModelsTreeItemCollection')
-          },
-          replyAuthors: {
-            keyArgs: false,
-            merge: buildAbstractCollectionMergeFunction('CommentReplyAuthorCollection')
           },
           invitableCollaborators: {
             merge: buildAbstractCollectionMergeFunction(
@@ -265,11 +261,22 @@ function createCache(): InMemoryCache {
           }
         }
       },
-      Comment: {
+      Topic: {
         fields: {
-          replies: {
+          comments: {
             keyArgs: ['limit']
           },
+          commentAuthors: {
+            keyArgs: false,
+            merge: buildAbstractCollectionMergeFunction('CommentAuthorCollection')
+          },
+          permissions: {
+            merge: mergeAsObjectsFunction
+          }
+        }
+      },
+      Comment: {
+        fields: {
           permissions: {
             merge: mergeAsObjectsFunction
           }

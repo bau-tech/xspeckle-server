@@ -24,6 +24,8 @@ export const webhookTriggerDisplayNames: Record<
   [WebhookTriggers.CommentCreated]: 'comment_created',
   [WebhookTriggers.CommentArchived]: 'comment_archived',
   [WebhookTriggers.CommentReplied]: 'comment_replied',
+  [WebhookTriggers.CommentUpdated]: 'comment_updated',
+  [WebhookTriggers.CommentDeleted]: 'comment_deleted',
   [WebhookTriggers.StreamPermissionsAdd]: 'project_permissions_add',
   [WebhookTriggers.StreamPermissionsRemove]: 'project_permissions_remove'
 }

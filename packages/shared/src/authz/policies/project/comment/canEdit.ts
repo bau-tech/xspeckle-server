@@ -61,8 +61,14 @@ export const canEditProjectCommentPolicy: AuthPolicy<
     const comment = await loaders.getComment({ commentId, projectId })
     if (!comment) return err(new CommentNotFoundError())
 
-    // Disallow if user is not the author
-    if (comment.authorId !== userId) {
+    if (comment.authorId === userId) return ok()
+
+    // BCF topics are shared work items: on a BCF server any project member
+    // may update any topic or comment (status, assignee, ...), not just its
+    // author. Only project members, though -- not everyone who can comment
+    // on a public project.
+    const projectRole = await loaders.getProjectRole({ projectId, userId: userId! })
+    if (!projectRole) {
       return err(
         new CommentNoAccessError('You do not have access to edit this comment')
       )

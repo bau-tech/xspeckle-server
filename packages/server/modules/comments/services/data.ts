@@ -11,9 +11,11 @@ import type {
 import {
   formatSerializedViewerState,
   isVersionedSerializedViewerState,
+  isSerializedViewerState,
   inputToVersionedState
 } from '@speckle/shared/viewer/state'
 import { intersection, isObjectLike } from 'lodash-es'
+import type { PartialDeep } from 'type-fest'
 
 export type LegacyData = Partial<LegacyCommentViewerData>
 export type DataStruct = VersionedSerializedViewerState
@@ -153,7 +155,17 @@ export const convertLegacyDataToStateFactory =
           ],
           target: [data.camPos?.[3] || 0, data.camPos?.[4] || 0, data.camPos?.[5] || 0],
           isOrthoProjection: !!data.camPos?.[6],
-          zoom: data.camPos?.[7] || 1
+          zoom: data.camPos?.[7] || 1,
+          direction: null,
+          upVector: [0, 1, 0],
+          fieldOfView: 60,
+          viewToWorldScale: null
+        },
+        bcf: {
+          clippingPlanes: [],
+          defaultVisibility: true,
+          visibilityExceptions: [],
+          coloring: []
         },
         viewMode: {
           mode: 0,
@@ -191,3 +203,174 @@ export const convertLegacyDataToStateFactory =
     }
     return ret
   }
+
+/**
+ * BCF Viewpoint <-> stored SerializedViewerState conversion. Kept independent
+ * of generated GraphQL types (plain structural interfaces) since this is a
+ * pure data-shape concern, not an API-layer one.
+ */
+
+type Vec3 = { x: number; y: number; z: number }
+
+export interface ViewpointInputData {
+  isOrthogonal?: boolean | null
+  cameraViewPoint?: Vec3 | null
+  cameraDirection?: Vec3 | null
+  cameraUpVector?: Vec3 | null
+  fieldOfView?: number | null
+  viewToWorldScale?: number | null
+  clippingPlanes?: Array<{ location: Vec3; direction: Vec3 }> | null
+  defaultVisibility?: boolean | null
+  selection?: string[] | null
+  visibilityExceptions?: string[] | null
+  coloring?: Array<{ ifcGuid: string; color: string }> | null
+}
+
+export interface ViewpointOutput {
+  isOrthogonal: boolean
+  cameraViewPoint: Vec3 | null
+  cameraDirection: Vec3 | null
+  cameraUpVector: Vec3 | null
+  fieldOfView: number | null
+  viewToWorldScale: number | null
+  clippingPlanes: Array<{ location: Vec3; direction: Vec3 }>
+  defaultVisibility: boolean
+  selection: string[]
+  visibilityExceptions: string[]
+  coloring: Array<{ ifcGuid: string; color: string }>
+  snapshot: string | null
+}
+
+const vec3ToArray = (v?: Vec3 | null): number[] | null => (v ? [v.x, v.y, v.z] : null)
+const arrayToVec3 = (a?: number[] | null): Vec3 | null =>
+  a && a.length === 3 ? { x: a[0], y: a[1], z: a[2] } : null
+
+/**
+ * Converts a narrow BCF ViewpointInput into a partial SerializedViewerState.
+ * BCF stores position+direction; Speckle stores position+target, so a
+ * synthetic target is derived along the direction when both are present --
+ * only the angle matters for view restoration, not the exact distance.
+ */
+export function viewpointInputToPartialState(
+  viewpoint: ViewpointInputData,
+  context: { projectId: string; resourceIdString: string }
+): PartialDeep<SerializedViewerState> {
+  const position = vec3ToArray(viewpoint.cameraViewPoint)
+  const direction = vec3ToArray(viewpoint.cameraDirection)
+  const target =
+    position && direction
+      ? [
+          position[0] + direction[0] * 10,
+          position[1] + direction[1] * 10,
+          position[2] + direction[2] * 10
+        ]
+      : position || [0, 0, 0]
+
+  return {
+    projectId: context.projectId,
+    sessionId: 'viewpoint-input',
+    viewer: { metadata: { filteringState: null } },
+    resources: {
+      request: { resourceIdString: context.resourceIdString, threadFilters: {} }
+    },
+    ui: {
+      camera: {
+        position: position || [0, 0, 0],
+        target,
+        isOrthoProjection: viewpoint.isOrthogonal || false,
+        direction,
+        upVector: vec3ToArray(viewpoint.cameraUpVector),
+        fieldOfView: viewpoint.fieldOfView ?? undefined,
+        viewToWorldScale: viewpoint.viewToWorldScale ?? undefined
+      },
+      bcf: {
+        clippingPlanes: (viewpoint.clippingPlanes || []).map((p) => ({
+          location: vec3ToArray(p.location) || [0, 0, 0],
+          direction: vec3ToArray(p.direction) || [0, 0, 0]
+        })),
+        defaultVisibility: viewpoint.defaultVisibility ?? true,
+        visibilityExceptions: viewpoint.visibilityExceptions || [],
+        coloring: viewpoint.coloring || []
+      },
+      filters: {
+        selectedObjectApplicationIds: Object.fromEntries(
+          (viewpoint.selection || []).map((id) => [id, id])
+        )
+      }
+    }
+  }
+}
+
+/**
+ * Combines an optional full SerializedViewerState with an optional narrow
+ * BCF ViewpointInput into the partial state to persist. `viewerState` wins
+ * for the base shape when both are given; `viewpoint`'s fields overlay on
+ * top of it. Returns null when neither carries usable data.
+ */
+export function combineViewerStateInputs(params: {
+  viewerState?: unknown
+  viewpoint?: ViewpointInputData | null
+  projectId: string
+  resourceIdString: string
+}): PartialDeep<SerializedViewerState> | null {
+  const { viewerState, viewpoint, projectId, resourceIdString } = params
+  const hasViewerState = isSerializedViewerState(viewerState)
+  const hasViewpointCamera = !!viewpoint?.cameraViewPoint
+
+  if (!hasViewerState && !hasViewpointCamera) return null
+
+  const base: PartialDeep<SerializedViewerState> = hasViewerState
+    ? (viewerState as PartialDeep<SerializedViewerState>)
+    : viewpointInputToPartialState(viewpoint!, { projectId, resourceIdString })
+
+  if (!viewpoint || !hasViewerState) return base
+
+  const overlay = viewpointInputToPartialState(viewpoint, {
+    projectId,
+    resourceIdString
+  })
+
+  return {
+    ...base,
+    ui: {
+      ...base.ui,
+      camera: { ...base.ui?.camera, ...overlay.ui?.camera },
+      bcf: { ...base.ui?.bcf, ...overlay.ui?.bcf },
+      filters: {
+        ...base.ui?.filters,
+        selectedObjectApplicationIds: viewpoint.selection?.length
+          ? overlay.ui?.filters?.selectedObjectApplicationIds
+          : base.ui?.filters?.selectedObjectApplicationIds
+      }
+    }
+  }
+}
+
+/**
+ * Maps a formatted SerializedViewerState (plus the entity's own screenshot)
+ * into the public BCF Viewpoint shape. Returns null if there's no state at
+ * all -- a Topic/Comment without a captured viewpoint is valid in BCF.
+ */
+export function stateToViewpoint(
+  state: SerializedViewerState | null,
+  screenshot: string | null
+): ViewpointOutput | null {
+  if (!state) return null
+  return {
+    isOrthogonal: state.ui.camera.isOrthoProjection,
+    cameraViewPoint: arrayToVec3(state.ui.camera.position),
+    cameraDirection: arrayToVec3(state.ui.camera.direction),
+    cameraUpVector: arrayToVec3(state.ui.camera.upVector),
+    fieldOfView: state.ui.camera.fieldOfView,
+    viewToWorldScale: state.ui.camera.viewToWorldScale,
+    clippingPlanes: state.ui.bcf.clippingPlanes.map((p) => ({
+      location: arrayToVec3(p.location) || { x: 0, y: 0, z: 0 },
+      direction: arrayToVec3(p.direction) || { x: 0, y: 0, z: 0 }
+    })),
+    defaultVisibility: state.ui.bcf.defaultVisibility,
+    selection: Object.keys(state.ui.filters.selectedObjectApplicationIds),
+    visibilityExceptions: state.ui.bcf.visibilityExceptions,
+    coloring: state.ui.bcf.coloring,
+    snapshot: screenshot
+  }
+}

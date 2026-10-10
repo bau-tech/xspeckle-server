@@ -1,5 +1,5 @@
 <template>
-  <ProjectPageSettingsBlock background title="Discussions" :auth-check="canUpdate">
+  <ProjectPageSettingsBlock background title="BCF" :auth-check="canUpdate">
     <template #introduction>
       <p class="text-body-xs text-foreground">
         Control who can leave comments on this project.

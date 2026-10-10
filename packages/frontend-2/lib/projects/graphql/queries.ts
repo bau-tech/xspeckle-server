@@ -143,11 +143,11 @@ export const latestCommentThreadsQuery = graphql(`
   query ProjectLatestCommentThreads(
     $projectId: String!
     $cursor: String = null
-    $filter: ProjectCommentsFilter = null
+    $filter: ProjectTopicsFilter = null
   ) {
     project(id: $projectId) {
       id
-      commentThreads(cursor: $cursor, limit: 8, filter: $filter) {
+      topics(cursor: $cursor, limit: 8, filter: $filter) {
         totalCount
         cursor
         items {

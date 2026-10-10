@@ -6,7 +6,15 @@ import events from 'events'
 
 events.setMaxListeners(31)
 process.env.FORCE_COLOR = '1'
-const rootDir = path.resolve(getESMDirname(import.meta.url), '../')
+
+// zx's shell templating (and eslint/globby's own glob handling) treat
+// backslashes as escape characters, so Windows-style paths need to be
+// forward-slash form before they're ever interpolated into a command or
+// compared against each other -- otherwise sequences like '\v'/'\f'/'\co'
+// get silently swallowed as escape sequences.
+const toPosixPath = (p) => p.split(path.sep).join('/')
+
+const rootDir = toPosixPath(path.resolve(getESMDirname(import.meta.url), '../'))
 
 /**
  * Util to run eslint on the entire monorepo
@@ -17,8 +25,11 @@ const rootDir = path.resolve(getESMDirname(import.meta.url), '../')
 const getFileNames = () => {
   // Read argv file names
   const fileNames = process.argv.slice(2).filter((f) => !['.', '*', '**/*'].includes(f))
+  // Always normalize through path.resolve(), even for already-absolute paths --
+  // some callers (e.g. lint-staged) pass absolute paths with forward slashes on
+  // Windows, which path.isAbsolute() alone wouldn't catch and re-normalize.
   const absoluteFileNames = fileNames.map((f) =>
-    path.isAbsolute(f) ? f : path.resolve(process.cwd(), f)
+    toPosixPath(path.resolve(process.cwd(), f))
   )
   return absoluteFileNames
 }
@@ -31,7 +42,7 @@ const resolvePackageContexts = async (absoluteFileNames) => {
         return d.isDirectory() && !ignoredPackageNames.includes(d.name)
       })
       .map((d) => ({
-        absolutePath: path.join(rootDir, './packages', d.name)
+        absolutePath: `${rootDir}/packages/${d.name}`
       })),
     {
       absolutePath: rootDir

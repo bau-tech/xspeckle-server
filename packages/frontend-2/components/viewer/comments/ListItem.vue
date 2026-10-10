@@ -11,21 +11,12 @@
     <div class="flex-1 flex flex-col gap-y-1">
       <div class="flex items-center space-x-1.5 justify-between">
         <UserAvatarGroup :users="threadAuthors" size="sm" />
-        <FormButton
-          v-if="!isLimited"
-          v-tippy="thread.archived ? 'Unresolve' : 'Resolve'"
-          :icon-left="thread.archived ? CheckCircleIcon : CheckCircleIconOutlined"
-          text
-          hide-text
-          :disabled="!canArchiveOrUnarchive"
-          @click.stop="toggleCommentResolvedStatus()"
-        />
       </div>
       <div class="flex items-center gap-x-1.5 text-body-3xs">
         <span class="text-foreground">
           {{ thread.author.name }}
           <span v-if="threadAuthors.length !== 1">
-            & {{ thread.replyAuthors.totalCount }} others
+            & {{ thread.commentAuthors.totalCount }} others
           </span>
         </span>
 
@@ -33,11 +24,19 @@
           {{ createdAt.relative }}
         </span>
       </div>
-      <div
-        v-if="!isLimited"
-        class="text-body-2xs text-foreground dark:text-foreground-2 line-clamp-2 py-1"
-      >
-        {{ thread.rawText }}
+      <div v-if="!isLimited" class="py-1">
+        <div
+          v-if="thread.title"
+          class="text-body-2xs font-medium text-foreground line-clamp-1"
+        >
+          {{ thread.title }}
+        </div>
+        <div
+          v-if="thread.rawText?.trim()"
+          class="text-body-2xs text-foreground dark:text-foreground-2 line-clamp-2"
+        >
+          {{ thread.rawText }}
+        </div>
       </div>
       <ViewerResourcesLimitAlert v-else limit-type="comment" :project="project" />
       <div class="text-body-3xs flex items-center space-x-1.5 text-foreground-3">
@@ -59,28 +58,21 @@
           </div>
         </div>
         <span>
-          {{ thread.replies.totalCount }}
-          {{ thread.replies.totalCount === 1 ? 'reply' : 'replies' }}
+          {{ thread.comments.totalCount }}
+          {{ thread.comments.totalCount === 1 ? 'reply' : 'replies' }}
         </span>
       </div>
     </div>
   </div>
 </template>
 <script setup lang="ts">
-import { CheckCircleIcon, ClockIcon } from '@heroicons/vue/24/solid'
-import { CheckCircleIcon as CheckCircleIconOutlined } from '@heroicons/vue/24/outline'
+import { ClockIcon } from '@heroicons/vue/24/solid'
 import type { LoadedCommentThread } from '~~/lib/viewer/composables/setup'
 import {
   useInjectedViewerInterfaceState,
   useInjectedViewerState
 } from '~~/lib/viewer/composables/setup'
-import { useActiveUser } from '~~/lib/auth/composables/activeUser'
-import {
-  useArchiveComment,
-  useCommentContext
-} from '~~/lib/viewer/composables/commentManagement'
-import { ToastNotificationType, useGlobalToast } from '~~/lib/common/composables/toast'
-import { Roles } from '@speckle/shared'
+import { useCommentContext } from '~~/lib/viewer/composables/commentManagement'
 import { useMixpanel } from '~~/lib/core/composables/mp'
 import { useThreadUtilities } from '~~/lib/viewer/composables/ui'
 
@@ -92,19 +84,16 @@ const {
   threads: { openThread }
 } = useInjectedViewerInterfaceState()
 const { open: openThreadRaw } = useThreadUtilities()
-const { activeUser } = useActiveUser()
-const archiveComment = useArchiveComment()
-const { triggerNotification } = useGlobalToast()
 const {
-  projectId,
   resources: {
     response: { project }
   }
 } = useInjectedViewerState()
 
-const isLimited = computed(() => {
-  return !props.thread.rawText || props.thread.rawText.trim() === ''
-})
+// The server withholds the text (null) of a topic beyond the plan's history
+// limit. An empty string is just an empty description -- optional in BCF, so
+// e.g. a topic synced from the external BCF server with only a title -- not a limit.
+const isLimited = computed(() => props.thread.rawText === null)
 
 const mp = useMixpanel()
 const open = (id: string) => {
@@ -132,33 +121,9 @@ const isOpenInViewer = computed(() => openThread.thread.value?.id === props.thre
 
 const threadAuthors = computed(() => {
   const authors = [props.thread.author]
-  for (const author of props.thread.replyAuthors.items) {
+  for (const author of props.thread.commentAuthors.items) {
     if (!authors.find((u) => u.id === author.id)) authors.push(author)
   }
   return authors
 })
-
-const canArchiveOrUnarchive = computed(
-  () =>
-    activeUser.value &&
-    (props.thread.author.id === activeUser.value.id ||
-      project.value?.role === Roles.Stream.Owner)
-)
-
-const toggleCommentResolvedStatus = async () => {
-  await archiveComment({
-    commentId: props.thread.id,
-    projectId: projectId.value,
-    archived: !props.thread.archived
-  })
-  mp.track('Comment Action', {
-    type: 'action',
-    name: 'archive',
-    status: !props.thread.archived
-  })
-  triggerNotification({
-    title: `Thread ${props.thread.archived ? 'reopened.' : 'resolved.'}`,
-    type: ToastNotificationType.Info
-  })
-}
 </script>

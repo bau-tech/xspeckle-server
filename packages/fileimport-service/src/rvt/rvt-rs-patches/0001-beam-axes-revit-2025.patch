@@ -1,0 +1,26 @@
+Place Revit 2025 structural framing along its location line (RE-49), not
+only Revit 2024.
+
+rvt-rs only turns this on for 2024, the one release upstream measured it
+on. On a 2025 file every beam then falls back to its record's axis-aligned
+box, so a beam at an angle in plan comes out as the whole box around it
+(155 of Snowdon Towers Structural's 942 beams).
+
+The solve checks itself on every beam -- a line whose ends leave the
+record's box, or whose solid doesn't reproduce the box, isn't used and the
+beam keeps its box -- so a 2025 layout difference makes it fall back, not
+draw wrong. Drop this patch once upstream lists 2025 itself.
+
+diff --git a/src/partition_beam_axes.rs b/src/partition_beam_axes.rs
+index 2c2c23c..dbc6123 100644
+--- a/src/partition_beam_axes.rs
++++ b/src/partition_beam_axes.rs
+@@ -43,7 +43,7 @@ use crate::{Result, RevitFile};
+ use std::collections::{BTreeMap, BTreeSet};
+ 
+ /// Releases where this layout is measured.
+-pub const BEAM_AXIS_SUPPORTED_REVIT_VERSIONS: &[u32] = &[2024];
++pub const BEAM_AXIS_SUPPORTED_REVIT_VERSIONS: &[u32] = &[2024, 2025];
+ 
+ /// The bytes a bounded line starts with.
+ pub const BOUNDED_LINE_TAG: [u8; 4] = [0x04, 0x00, 0x08, 0x01];

@@ -18,7 +18,6 @@ import type {
   CommitCreateInput,
   CommitUpdateInput,
   DeleteModelInput,
-  MutationCommentArchiveArgs,
   ProjectUpdateInput,
   StreamUpdateInput,
   UpdateModelInput,
@@ -244,12 +243,6 @@ export type AddCommitDeletedActivity = (params: {
 
 export type AddThreadCreatedActivity = (params: {
   input: CommentCreatedActivityInput
-  comment: CommentRecord
-}) => Promise<void>
-
-export type AddCommentArchivedActivity = (params: {
-  userId: string
-  input: MutationCommentArchiveArgs
   comment: CommentRecord
 }) => Promise<void>
 

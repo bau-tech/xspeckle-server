@@ -47,6 +47,10 @@ const config: CodegenConfig = {
             '@/modules/core/helpers/graphTypes#MutationsObjectGraphQLReturn',
           UserMetaMutations:
             '@/modules/core/helpers/graphTypes#MutationsObjectGraphQLReturn',
+          UserNotification:
+            '@/modules/notifications/helpers/graphTypes#UserNotificationGraphQLReturn',
+          UserNotificationMutations:
+            '@/modules/core/helpers/graphTypes#MutationsObjectGraphQLReturn',
           UserEmailMutations:
             '@/modules/core/helpers/graphTypes#MutationsObjectGraphQLReturn',
           ProjectMutations:
@@ -59,7 +63,7 @@ const config: CodegenConfig = {
             '@/modules/core/helpers/graphTypes#MutationsObjectGraphQLReturn',
           FileUploadMutations:
             '@/modules/core/helpers/graphTypes#MutationsObjectGraphQLReturn',
-          CommentMutations:
+          TopicMutations:
             '@/modules/core/helpers/graphTypes#MutationsObjectGraphQLReturn',
           AutomateFunctionPermissionChecks:
             '@/modules/automate/helpers/graphTypes#AutomateFunctionPermissionChecksGraphQLReturn',
@@ -70,8 +74,9 @@ const config: CodegenConfig = {
           AdminQueries: '@/modules/core/helpers/graphTypes#GraphQLEmptyReturn',
           ServerStatistics: '@/modules/core/helpers/graphTypes#GraphQLEmptyReturn',
           ServerStats: '@/modules/core/helpers/graphTypes#GraphQLEmptyReturn',
-          CommentReplyAuthorCollection:
-            '@/modules/comments/helpers/graphTypes#CommentReplyAuthorCollectionGraphQLReturn',
+          CommentAuthorCollection:
+            '@/modules/comments/helpers/graphTypes#CommentAuthorCollectionGraphQLReturn',
+          Topic: '@/modules/comments/helpers/graphTypes#TopicGraphQLReturn',
           Comment: '@/modules/comments/helpers/graphTypes#CommentGraphQLReturn',
           CommentPermissionChecks:
             '@/modules/comments/helpers/graphTypes#CommentPermissionChecksGraphQLReturn',

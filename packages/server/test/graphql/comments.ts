@@ -13,7 +13,7 @@ import { executeOperation } from '@/test/graphqlHelper'
 import { gql } from 'graphql-tag'
 
 const commentWithRepliesFragment = gql`
-  fragment CommentWithReplies on Comment {
+  fragment CommentWithReplies on Topic {
     id
     rawText
     text {
@@ -24,10 +24,10 @@ const commentWithRepliesFragment = gql`
         streamId
       }
     }
-    replies(limit: 10) {
+    comments(limit: 10) {
       items {
         id
-        text {
+        comment {
           doc
           attachments {
             id

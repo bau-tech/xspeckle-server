@@ -5,13 +5,15 @@ import type { BasicTestUser } from '@/test/authHelper'
 import { createTestUsers } from '@/test/authHelper'
 import type {
   CreateCommentInput,
-  CreateCommentReplyInput,
-  EditCommentInput
+  CreateTopicInput,
+  UpdateCommentInput,
+  UpdateTopicInput
 } from '@/modules/core/graph/generated/graphql'
 import {
   CreateProjectCommentDocument,
-  CreateProjectCommentReplyDocument,
-  EditProjectCommentDocument
+  CreateProjectTopicDocument,
+  UpdateProjectCommentDocument,
+  UpdateProjectTopicDocument
 } from '@/modules/core/graph/generated/graphql'
 import type { ExecuteOperationOptions, TestApolloServer } from '@/test/graphqlHelper'
 import { testApolloServer } from '@/test/graphqlHelper'
@@ -73,18 +75,21 @@ describe('Project Comments', () => {
       })
     })
 
-    const createProjectComment = async (
-      input: CreateCommentInput,
+    const createProjectTopic = async (
+      input: CreateTopicInput,
       options?: ExecuteOperationOptions
-    ) => await apollo.execute(CreateProjectCommentDocument, { input }, options)
+    ) => await apollo.execute(CreateProjectTopicDocument, { input }, options)
 
-    const createProjectCommentReply = async (input: CreateCommentReplyInput) =>
-      await apollo.execute(CreateProjectCommentReplyDocument, { input })
+    const createProjectComment = async (input: CreateCommentInput) =>
+      await apollo.execute(CreateProjectCommentDocument, { input })
 
-    const editProjectComment = async (input: EditCommentInput) =>
-      await apollo.execute(EditProjectCommentDocument, { input })
+    const updateProjectTopic = async (input: UpdateTopicInput) =>
+      await apollo.execute(UpdateProjectTopicDocument, { input })
 
-    it('can be created and replied to', async () => {
+    const updateProjectComment = async (input: UpdateCommentInput) =>
+      await apollo.execute(UpdateProjectCommentDocument, { input })
+
+    it('can be created with full BCF topic fields and commented on', async () => {
       const parentText = 'hello world111'
 
       let createEventFired = false
@@ -97,32 +102,69 @@ describe('Project Comments', () => {
         { timeout: TIME_MS.second }
       )
 
-      const threadInput: CreateCommentInput = {
+      const threadInput: CreateTopicInput = {
         projectId: myStream.id,
         resourceIdString: resourceUrlBuilder()
           .addModel(myBranch.id, myCommit.id)
           .toString(),
         content: {
           doc: RichTextEditor.convertBasicStringToDocument(parentText)
-        }
+        },
+        title: 'A real title',
+        topicType: 'Issue',
+        topicStatus: 'Open',
+        priority: 'Normal',
+        stage: 'Design',
+        labels: ['clash', 'urgent'],
+        assignedTo: 'someone@example.org'
       }
 
-      const res1 = await createProjectComment(threadInput)
-      const threadId = res1.data?.commentMutations.create.id
+      const res1 = await createProjectTopic(threadInput)
+      const topicId = res1.data?.topicMutations.create.id
 
       expect(res1).to.not.haveGraphQLErrors()
-      expect(threadId).to.be.ok
-      expect(res1.data?.commentMutations.create.rawText).to.equal(parentText)
-      expect(res1.data?.commentMutations.create.text?.doc).to.be.ok
-      expect(res1.data?.commentMutations.create.authorId).to.equal(me.id)
+      expect(topicId).to.be.ok
+      expect(res1.data?.topicMutations.create.rawText).to.equal(parentText)
+      expect(res1.data?.topicMutations.create.text?.doc).to.be.ok
+      expect(res1.data?.topicMutations.create.authorId).to.equal(me.id)
+      expect(res1.data?.topicMutations.create.title).to.equal('A real title')
+      expect(res1.data?.topicMutations.create.topicType).to.equal('Issue')
+      expect(res1.data?.topicMutations.create.topicStatus).to.equal('Open')
+      expect(res1.data?.topicMutations.create.priority).to.equal('Normal')
+      expect(res1.data?.topicMutations.create.stage).to.equal('Design')
+      expect(res1.data?.topicMutations.create.labels).to.deep.equal(['clash', 'urgent'])
+      expect(res1.data?.topicMutations.create.assignedTo).to.equal(
+        'someone@example.org'
+      )
+      expect(res1.data?.topicMutations.create.index).to.be.greaterThan(0)
+      expect(res1.data?.topicMutations.create.serverAssignedId).to.equal(
+        String(res1.data?.topicMutations.create.index)
+      )
       expect(createEventFired).to.be.true
     })
 
+    it('can be created with no BCF fields, resolving sensible empty defaults', async () => {
+      const res = await createProjectTopic({
+        projectId: myStream.id,
+        resourceIdString: resourceUrlBuilder()
+          .addModel(myBranch.id, myCommit.id)
+          .toString(),
+        content: {
+          doc: RichTextEditor.convertBasicStringToDocument('bare topic')
+        }
+      })
+
+      expect(res).to.not.haveGraphQLErrors()
+      expect(res.data?.topicMutations.create.title).to.be.null
+      expect(res.data?.topicMutations.create.topicStatus).to.be.null
+      expect(res.data?.topicMutations.create.labels).to.deep.equal([])
+    })
+
     describe('after creation', async () => {
-      let threadId: string
+      let topicId: string
 
       before(async () => {
-        const res = await createProjectComment(
+        const res = await createProjectTopic(
           {
             projectId: myStream.id,
             resourceIdString: resourceUrlBuilder()
@@ -134,40 +176,41 @@ describe('Project Comments', () => {
           },
           { assertNoErrors: true }
         )
-        expect(res.data?.commentMutations.create.id).to.be.ok
-        threadId = res.data!.commentMutations.create.id
+        expect(res.data?.topicMutations.create.id).to.be.ok
+        topicId = res.data!.topicMutations.create.id
       })
 
-      it('can be replied to', async () => {
-        const replyText = 'hello again bozo222'
-        let replyEventFired = false
+      it('can be commented on', async () => {
+        const commentText = 'hello again bozo222'
+        let commentEventFired = false
         getEventBus().listenOnce(
           CommentEvents.Created,
           ({ payload }) => {
-            expect(commentTextToRawString(payload.comment.text)).to.equal(replyText)
-            expect(payload.comment.parentComment).to.equal(threadId)
-            replyEventFired = true
+            expect(commentTextToRawString(payload.comment.text)).to.equal(commentText)
+            expect(payload.comment.parentComment).to.equal(topicId)
+            commentEventFired = true
           },
           { timeout: TIME_MS.second }
         )
 
-        const replyInput: CreateCommentReplyInput = {
+        const commentInput: CreateCommentInput = {
           projectId: myStream.id,
-          threadId: threadId!,
+          topicId: topicId!,
           content: {
-            doc: RichTextEditor.convertBasicStringToDocument(replyText)
+            doc: RichTextEditor.convertBasicStringToDocument(commentText)
           }
         }
-        const res2 = await createProjectCommentReply(replyInput)
+        const res2 = await createProjectComment(commentInput)
 
         expect(res2).to.not.haveGraphQLErrors()
-        expect(res2.data?.commentMutations.reply.rawText).to.equal(replyText)
-        expect(res2.data?.commentMutations.reply.text?.doc).to.be.ok
-        expect(res2.data?.commentMutations.reply.authorId).to.equal(me.id)
-        expect(replyEventFired).to.be.true
+        expect(res2.data?.topicMutations.comment.rawComment).to.equal(commentText)
+        expect(res2.data?.topicMutations.comment.comment?.doc).to.be.ok
+        expect(res2.data?.topicMutations.comment.authorId).to.equal(me.id)
+        expect(res2.data?.topicMutations.comment.topicId).to.equal(topicId)
+        expect(commentEventFired).to.be.true
       })
 
-      it('can be edited', async () => {
+      it('can be updated (topic content + BCF fields)', async () => {
         const newText = 'new text here!!!'
         let editEventFired = false
 
@@ -175,25 +218,54 @@ describe('Project Comments', () => {
           CommentEvents.Updated,
           ({ payload }) => {
             expect(commentTextToRawString(payload.newComment.text)).to.equal(newText)
-            expect(payload.newComment.id).to.equal(threadId)
+            expect(payload.newComment.id).to.equal(topicId)
             editEventFired = true
           },
           { timeout: TIME_MS.second }
         )
 
-        const res = await editProjectComment({
-          commentId: threadId,
+        const res = await updateProjectTopic({
+          topicId,
           content: {
             doc: RichTextEditor.convertBasicStringToDocument(newText)
           },
-          projectId: myStream.id
+          projectId: myStream.id,
+          topicStatus: 'Closed',
+          labels: ['resolved']
         })
 
         expect(res).to.not.haveGraphQLErrors()
-        expect(res.data?.commentMutations.edit.rawText).to.equal(newText)
-        expect(res.data?.commentMutations.edit.text?.doc).to.be.ok
-        expect(res.data?.commentMutations.edit.authorId).to.equal(me.id)
+        expect(res.data?.topicMutations.update.rawText).to.equal(newText)
+        expect(res.data?.topicMutations.update.text?.doc).to.be.ok
+        expect(res.data?.topicMutations.update.authorId).to.equal(me.id)
+        expect(res.data?.topicMutations.update.topicStatus).to.equal('Closed')
+        expect(res.data?.topicMutations.update.labels).to.deep.equal(['resolved'])
         expect(editEventFired).to.be.true
+      })
+
+      it('updateComment only ever touches comment content, never topic fields', async () => {
+        const commentRes = await createProjectComment({
+          projectId: myStream.id,
+          topicId,
+          content: {
+            doc: RichTextEditor.convertBasicStringToDocument('a comment to edit')
+          }
+        })
+        const commentId = commentRes.data!.topicMutations.comment.id
+
+        const newCommentText = 'edited comment text'
+        const res = await updateProjectComment({
+          commentId,
+          projectId: myStream.id,
+          content: {
+            doc: RichTextEditor.convertBasicStringToDocument(newCommentText)
+          }
+        })
+
+        expect(res).to.not.haveGraphQLErrors()
+        expect(res.data?.topicMutations.updateComment.rawComment).to.equal(
+          newCommentText
+        )
       })
     })
   })

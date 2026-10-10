@@ -275,57 +275,6 @@ const viewAComment = async ({ apollo, resources, shouldSucceed }: TestContext) =
   })
 }
 
-const archiveMyComment = async ({ apollo, resources, shouldSucceed }: TestContext) => {
-  const context = apollo.context
-  const { id: commentId } = await createComment({
-    userId: context!.userId!,
-    input: {
-      streamId: resources.streamId,
-      text: buildCommentInputFromString('i wrote this myself'),
-      blobIds: [],
-      data: {},
-      resources: [
-        { resourceId: resources.streamId, resourceType: 'stream' },
-        { resourceId: resources.objectId, resourceType: 'object' }
-      ]
-    }
-  })
-  const res = await executeOperation(
-    apollo,
-    gql`
-      mutation ($streamId: String!, $commentId: String!) {
-        commentArchive(streamId: $streamId, commentId: $commentId)
-      }
-    `,
-    { streamId: resources.streamId, commentId }
-  )
-  testResult(shouldSucceed, res, (res) => {
-    expect(res.data.commentArchive).to.be.true
-  })
-}
-
-const archiveOthersComment = async ({
-  apollo,
-  resources,
-  shouldSucceed
-}: TestContext) => {
-  const res = await executeOperation(
-    apollo,
-    gql`
-      mutation ($streamId: String!, $commentId: String!) {
-        commentArchive(streamId: $streamId, commentId: $commentId)
-      }
-    `,
-    {
-      streamId: resources.streamId,
-      commentId: resources.commentId
-    }
-  )
-  testResult(shouldSucceed, res, (res) => {
-    expect(res.data.commentArchive).to.be.true
-  })
-}
-
 const editMyComment = async ({ apollo, resources, shouldSucceed }: TestContext) => {
   const { id: commentId } = await createComment({
     userId: apollo.context!.userId!,
@@ -418,11 +367,11 @@ const queryComment = async ({ apollo, resources, shouldSucceed }: TestContext) =
       query ($id: String!, $streamId: String!) {
         comment(id: $id, streamId: $streamId) {
           id
-          replies {
+          comments {
             totalCount
             items {
               id
-              text {
+              comment {
                 doc
               }
             }
@@ -752,8 +701,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, true],
             [broadcastCommentActivity, true],
             [viewAComment, true],
-            [archiveMyComment, true],
-            [archiveOthersComment, true],
             [editMyComment, true],
             [editOthersComment, false],
             [replyToAComment, true],
@@ -772,8 +719,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, true],
             [broadcastCommentActivity, true],
             [viewAComment, true],
-            [archiveMyComment, true],
-            [archiveOthersComment, false],
             [editMyComment, true],
             [editOthersComment, false],
             [replyToAComment, true],
@@ -792,8 +737,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, true],
             [broadcastCommentActivity, true],
             [viewAComment, true],
-            [archiveMyComment, true],
-            [archiveOthersComment, false],
             [editMyComment, true],
             [editOthersComment, false],
             [replyToAComment, true],
@@ -812,7 +755,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, false],
             [broadcastCommentActivity, false],
             [viewAComment, false],
-            [archiveOthersComment, false],
             [editOthersComment, false],
             [replyToAComment, false],
             [queryComment, false],
@@ -830,8 +772,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, true],
             [broadcastCommentActivity, false],
             [viewAComment, true],
-            [archiveMyComment, false],
-            [archiveOthersComment, false],
             [editMyComment, false],
             [editOthersComment, false],
             [replyToAComment, false],
@@ -850,8 +790,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, true],
             [broadcastCommentActivity, true],
             [viewAComment, true],
-            [archiveMyComment, true],
-            [archiveOthersComment, false],
             [editMyComment, true],
             [editOthersComment, false],
             [replyToAComment, true],
@@ -875,7 +813,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, false],
             [broadcastCommentActivity, false],
             [viewAComment, false],
-            [archiveOthersComment, false],
             [editOthersComment, false],
             [replyToAComment, false],
             [queryComment, true],
@@ -893,7 +830,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, false],
             [broadcastCommentActivity, false],
             [viewAComment, false],
-            [archiveOthersComment, false],
             [editOthersComment, false],
             [replyToAComment, false],
             [queryComment, true],
@@ -916,7 +852,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, false],
             [broadcastCommentActivity, false],
             [viewAComment, false],
-            [archiveOthersComment, false],
             [editOthersComment, false],
             [replyToAComment, false],
             [queryComment, false],
@@ -934,7 +869,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, false],
             [broadcastCommentActivity, false],
             [viewAComment, false],
-            [archiveOthersComment, false],
             [editOthersComment, false],
             [replyToAComment, false],
             [queryComment, true],
@@ -952,7 +886,6 @@ describe('Graphql @comments', () => {
             [broadcastViewerActivity, false],
             [broadcastCommentActivity, false],
             [viewAComment, false],
-            [archiveOthersComment, false],
             [editOthersComment, false],
             [replyToAComment, false],
             [queryComment, true],

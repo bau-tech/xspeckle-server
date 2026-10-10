@@ -139,7 +139,7 @@ export const getRegionalProjectCommentQuery = gql`
   query GetRegionalProjectComment($projectId: String!, $commentId: String!) {
     project(id: $projectId) {
       id
-      comment(id: $commentId) {
+      topic(id: $commentId) {
         id
       }
     }

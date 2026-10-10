@@ -15,21 +15,7 @@
         transition bg-foundation shadow hover:shadow-xl flex -space-x-2 items-center p-[2px] rounded-tr-full rounded-tl-full rounded-br-full`"
           @click="onThreadClick"
         >
-          <UserAvatarGroup
-            v-if="!modelValue.archived"
-            hide-tooltips
-            :users="threadAuthors"
-          />
-          <div
-            v-if="modelValue.archived"
-            class="w-7 h-7 flex items-center justify-center"
-          >
-            <div
-              class="w-6 h-6 flex items-center justify-center bg-foundation dark:bg-foundation-2 rounded-full"
-            >
-              <IconCircleCheck class="size-5 text-primary" />
-            </div>
-          </div>
+          <UserAvatarGroup hide-tooltips :users="threadAuthors" />
         </button>
       </div>
     </div>
@@ -89,21 +75,190 @@
                 </LayoutMenu>
               </div>
               <FormButton
-                v-tippy="modelValue.archived ? 'Unresolve' : 'Resolve'"
-                :icon-left="CircleCheck"
-                hide-text
-                :disabled="!canArchiveOrUnarchive"
-                color="subtle"
-                size="sm"
-                @click="toggleCommentResolvedStatus()"
-              />
-              <FormButton
                 :icon-left="X"
                 hide-text
                 color="subtle"
                 size="sm"
                 @click="changeExpanded(false)"
               />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-1 border-b border-outline-2 p-2">
+            <ViewerCommentsBcfPropertySelect
+              :model-value="topicType"
+              :items="BCF_TOPIC_TYPES"
+              label="Type"
+              name="thread-topic-type"
+              @update:model-value="onTopicTypeChanged"
+            />
+            <ViewerCommentsBcfPropertySelect
+              :model-value="topicStatus"
+              :items="BCF_TOPIC_STATUSES"
+              label="Status"
+              name="thread-topic-status"
+              @update:model-value="onTopicStatusChanged"
+            />
+            <ViewerCommentsBcfPropertySelect
+              :model-value="priority"
+              :items="BCF_PRIORITIES"
+              label="Priority"
+              name="thread-priority"
+              @update:model-value="onPriorityChanged"
+            />
+            <FormTextInput
+              :model-value="stage ?? undefined"
+              name="thread-stage"
+              label="Stage"
+              placeholder="Stage"
+              size="sm"
+              @change="onStageChanged"
+            />
+          </div>
+          <div
+            class="flex items-center gap-x-1 overflow-x-auto border-b border-outline-2 p-2 simple-scrollbar"
+          >
+            <button
+              v-for="item in viewpointGalleryItems"
+              :key="item.key"
+              v-tippy="item.isOriginal ? 'Original viewpoint' : 'Saved viewpoint'"
+              type="button"
+              class="relative shrink-0 w-[84px] h-[60px] rounded overflow-hidden border border-outline-2 hover:border-primary transition"
+              @click="onRestoreViewpoint(item.viewerState)"
+            >
+              <img
+                :src="item.snapshot ?? undefined"
+                class="w-full h-full object-cover"
+                alt="Viewpoint snapshot"
+              />
+            </button>
+            <FormButton
+              v-tippy="'Save current view as a viewpoint'"
+              :icon-left="Camera"
+              hide-text
+              color="subtle"
+              size="sm"
+              :loading="isSavingViewpoint"
+              @click="onSaveViewpoint"
+            />
+          </div>
+          <div class="border-b border-outline-2 p-2">
+            <button
+              type="button"
+              class="text-body-2xs text-foreground-2 hover:text-foreground font-medium"
+              @click="showMoreDetails = !showMoreDetails"
+            >
+              {{ showMoreDetails ? 'Hide details' : 'More details' }}
+            </button>
+            <div v-if="showMoreDetails" class="flex flex-col gap-y-2 mt-2">
+              <FormTextInput
+                :model-value="title ?? undefined"
+                name="thread-title"
+                label="Title"
+                placeholder="Title"
+                size="sm"
+                @change="onTitleChanged"
+              />
+              <FormTags
+                :model-value="labels"
+                name="thread-labels"
+                label="Labels"
+                placeholder="Add a label"
+                size="sm"
+                @update:model-value="onLabelsChanged"
+              />
+              <FormTags
+                :model-value="referenceLinks"
+                name="thread-reference-links"
+                label="Reference links"
+                placeholder="Add a link"
+                size="sm"
+                @update:model-value="onReferenceLinksChanged"
+              />
+              <FormTextInput
+                :model-value="dueDate ?? undefined"
+                type="date"
+                name="thread-due-date"
+                label="Due date"
+                size="sm"
+                :custom-icon="CalendarIcon"
+                @change="onDueDateChanged"
+              />
+              <FormTextInput
+                :model-value="assignedTo ?? undefined"
+                name="thread-assigned-to"
+                label="Assigned to"
+                placeholder="Assigned to"
+                size="sm"
+                @change="onAssignedToChanged"
+              />
+              <FormSelectBase
+                :model-value="
+                  relatedTopicOptions.filter((o) => relatedTopicIds.includes(o.id))
+                "
+                :items="relatedTopicOptions"
+                by="id"
+                multiple
+                name="thread-related-topics"
+                label="Related topics"
+                placeholder="Related topics"
+                size="sm"
+                @update:model-value="onRelatedTopicsSelectionChanged"
+              >
+                <template #something-selected="{ value }">
+                  <span class="truncate">
+                    {{
+                      (Array.isArray(value) ? value : [value])
+                        .map(topicOptionLabel)
+                        .join(', ')
+                    }}
+                  </span>
+                </template>
+                <template #option="{ item }">
+                  <span class="truncate">{{ topicOptionLabel(item) }}</span>
+                </template>
+              </FormSelectBase>
+              <div class="flex flex-col gap-y-1">
+                <div class="text-body-3xs text-foreground-2 font-medium">
+                  Document references
+                </div>
+                <div
+                  v-for="(doc, index) in documentReferences"
+                  :key="index"
+                  class="flex gap-x-1 items-start"
+                >
+                  <FormTextInput
+                    :model-value="doc.url ?? undefined"
+                    :name="`thread-doc-url-${index}`"
+                    placeholder="URL"
+                    size="sm"
+                    class="flex-1"
+                    @change="(payload) => onDocumentReferenceUrlChanged(index, payload)"
+                  />
+                  <FormTextInput
+                    :model-value="doc.description ?? undefined"
+                    :name="`thread-doc-desc-${index}`"
+                    placeholder="Description"
+                    size="sm"
+                    class="flex-1"
+                    @change="
+                      (payload) => onDocumentReferenceDescriptionChanged(index, payload)
+                    "
+                  />
+                  <FormButton
+                    :icon-left="X"
+                    hide-text
+                    color="subtle"
+                    size="sm"
+                    @click="removeDocumentReference(index)"
+                  />
+                </div>
+                <FormButton size="sm" color="subtle" @click="addDocumentReference">
+                  + Add reference
+                </FormButton>
+              </div>
+              <div v-if="bcfAuthorship" class="text-body-3xs text-foreground-2">
+                {{ bcfAuthorship }}
+              </div>
             </div>
           </div>
           <div
@@ -179,13 +334,14 @@
 import {
   MoveLeft,
   MoveRight,
-  CircleCheck,
   X,
   ChevronLeft,
   ChevronRight,
-  Ellipsis
+  Ellipsis,
+  Calendar as CalendarIcon,
+  Camera
 } from 'lucide-vue-next'
-import { ensureError } from '@speckle/shared'
+import { ensureError, SpeckleViewer } from '@speckle/shared'
 import type { Nullable } from '@speckle/shared'
 import { onKeyDown, useClipboard, useDraggable, onClickOutside } from '@vueuse/core'
 import { scrollToBottom } from '~~/lib/common/helpers/dom'
@@ -193,11 +349,25 @@ import { useViewerThreadTypingTracking } from '~~/lib/viewer/composables/activit
 import { useAnimatingEllipsis } from '~~/lib/viewer/composables/commentBubbles'
 import type { CommentBubbleModel } from '~~/lib/viewer/composables/commentBubbles'
 import {
-  useArchiveComment,
   useCheckViewerCommentingAccess,
   useMarkThreadViewed,
-  useCommentContext
+  useCommentContext,
+  useUpdateTopic,
+  useProjectTopicOptions,
+  useCreateViewpoint
 } from '~~/lib/viewer/composables/commentManagement'
+import {
+  useApplySerializedState,
+  StateApplyMode
+} from '~~/lib/viewer/composables/serialization'
+import type { DocumentReferenceInput } from '~~/lib/common/generated/gql/graphql'
+import {
+  BCF_TOPIC_TYPES,
+  BCF_TOPIC_STATUSES,
+  BCF_PRIORITIES,
+  toBcfDueDateInput,
+  fromBcfDueDate
+} from '~~/lib/viewer/helpers/bcf'
 import { useInjectedViewerState } from '~~/lib/viewer/composables/setup'
 import { useActiveUser } from '~~/lib/auth/composables/activeUser'
 import { ToastNotificationType, useGlobalToast } from '~~/lib/common/composables/toast'
@@ -215,12 +385,40 @@ enum ActionTypes {
 }
 
 graphql(`
-  fragment ViewerCommentThreadData on Comment {
+  fragment ViewerCommentThreadData on Topic {
     id
-    permissions {
-      canArchive {
-        ...FullPermissionCheckResult
-      }
+    topicType
+    topicStatus
+    priority
+    stage
+    title
+    labels
+    dueDate
+    assignedTo
+    relatedTopics {
+      id
+      title
+      rawText
+    }
+    documentReferences {
+      id
+      guid
+      documentGuid
+      url
+      description
+    }
+    guid
+    creationAuthor
+    modifiedAuthor
+    modifiedDate
+    referenceLinks
+    screenshot
+    viewpoints {
+      id
+      guid
+      index
+      snapshot
+      viewerState
     }
   }
 `)
@@ -244,7 +442,6 @@ const { isEmbedEnabled } = useEmbed()
 const threadId = computed(() => props.modelValue.id)
 const { copy } = useClipboard()
 const { isLoggedIn } = useActiveUser()
-const archiveComment = useArchiveComment()
 const { triggerNotification } = useGlobalToast()
 const { projectId } = useInjectedViewerState()
 const canReply = useCheckViewerCommentingAccess()
@@ -255,13 +452,255 @@ const { ellipsis, controls } = useAnimatingEllipsis()
 const { threadResourceStatus, hasClickedFullContext, goBack, handleContextClick } =
   useCommentContext()
 const { isOpenThread, open, closeAllThreads } = useThreadUtilities()
-const router = useSafeRouter()
 const menuId = useId()
+const updateTopic = useUpdateTopic()
+const createViewpoint = useCreateViewpoint()
+const applyState = useApplySerializedState()
 
 const showMenu = ref(false)
 const commentsContainer = ref(null as Nullable<HTMLElement>)
 const threadContainer = ref(null as Nullable<HTMLElement>)
 const threadActivator = ref(null as Nullable<HTMLElement>)
+
+const topicType = ref(props.modelValue.topicType ?? null)
+const topicStatus = ref(props.modelValue.topicStatus ?? null)
+const priority = ref(props.modelValue.priority ?? null)
+const stage = ref(props.modelValue.stage ?? null)
+const title = ref(props.modelValue.title ?? null)
+const dueDate = ref(fromBcfDueDate(props.modelValue.dueDate))
+const assignedTo = ref(props.modelValue.assignedTo ?? null)
+const labels = ref<string[]>(props.modelValue.labels ?? [])
+const referenceLinks = ref<string[]>(props.modelValue.referenceLinks ?? [])
+const relatedTopicIds = ref<string[]>(
+  (props.modelValue.relatedTopics ?? []).map((t) => t.id)
+)
+const documentReferences = ref<DocumentReferenceInput[]>(
+  (props.modelValue.documentReferences ?? []).map((d) => ({
+    guid: d.guid,
+    documentGuid: d.documentGuid,
+    url: d.url,
+    description: d.description
+  }))
+)
+const showMoreDetails = ref(false)
+
+// Viewpoints created via onSaveViewpoint this session -- kept separate from
+// props.modelValue.viewpoints (the server/cache-sourced list) rather than
+// trying to splice the mutation result into the Apollo cache, and merged
+// with it purely for display via viewpointGalleryItems below. Cleared
+// whenever the displayed thread changes, same as the other local refs.
+const newlyCreatedViewpoints = ref<
+  Array<{
+    id?: Nullable<string>
+    guid?: Nullable<string>
+    snapshot?: Nullable<string>
+    viewerState?: unknown
+  }>
+>([])
+const isSavingViewpoint = ref(false)
+
+// The viewer's own capture (viewerInstance.screenshot(), used by
+// useSubmitComment/useCreateViewpoint) is a full data URI. The external BCF
+// server's sync pushes snapshots as bare base64 (no "data:image/png;base64," prefix
+// -- stripped because Speckle's CreateCommentInput.screenshot rejects a full
+// data URI outright), so a topic pushed from there stores a bare base64
+// string in the same `screenshot` column. Normalize both shapes here rather
+// than relying on every producer to agree on one.
+const normalizeSnapshotSrc = (snapshot: Nullable<string>): Nullable<string> => {
+  if (!snapshot) return snapshot
+  return snapshot.startsWith('data:') ? snapshot : `data:image/png;base64,${snapshot}`
+}
+
+// Topic.viewpoints is the topic's one BCF viewpoint list -- its creation-time
+// view is simply the first entry, not a separate field anymore.
+const viewpointGalleryItems = computed(() => {
+  const items: Array<{
+    key: string
+    snapshot: Nullable<string>
+    viewerState: unknown
+    isOriginal: boolean
+  }> = []
+  const all = [...(props.modelValue.viewpoints ?? []), ...newlyCreatedViewpoints.value]
+  all.forEach((vp, i) => {
+    if (!vp.snapshot) return
+    items.push({
+      key: vp.guid ?? vp.id ?? `viewpoint-${i}`,
+      snapshot: normalizeSnapshotSrc(vp.snapshot),
+      viewerState: vp.viewerState,
+      isOriginal: i === 0
+    })
+  })
+  return items
+})
+
+const onSaveViewpoint = async () => {
+  isSavingViewpoint.value = true
+  try {
+    const created = await createViewpoint(props.modelValue.id)
+    if (created) newlyCreatedViewpoints.value.push(created)
+  } finally {
+    isSavingViewpoint.value = false
+  }
+}
+
+const onRestoreViewpoint = async (viewerState: unknown) => {
+  if (!SpeckleViewer.ViewerState.isSerializedViewerState(viewerState)) {
+    triggerNotification({
+      type: ToastNotificationType.Danger,
+      title: 'Could not restore viewpoint',
+      description: 'This viewpoint has no usable stored view state.'
+    })
+    return
+  }
+  await applyState(viewerState, StateApplyMode.ThreadOpen)
+}
+
+const { topicOptions } = useProjectTopicOptions()
+const relatedTopicOptions = computed(() =>
+  topicOptions.value.filter((t) => t.id !== props.modelValue.id)
+)
+const topicOptionLabel = (t: {
+  title?: Nullable<string>
+  rawText?: Nullable<string>
+}) => t.title || t.rawText || 'Untitled'
+
+watch(
+  () => props.modelValue.id,
+  () => {
+    topicType.value = props.modelValue.topicType ?? null
+    topicStatus.value = props.modelValue.topicStatus ?? null
+    priority.value = props.modelValue.priority ?? null
+    stage.value = props.modelValue.stage ?? null
+    title.value = props.modelValue.title ?? null
+    dueDate.value = fromBcfDueDate(props.modelValue.dueDate)
+    assignedTo.value = props.modelValue.assignedTo ?? null
+    labels.value = props.modelValue.labels ?? []
+    referenceLinks.value = props.modelValue.referenceLinks ?? []
+    relatedTopicIds.value = (props.modelValue.relatedTopics ?? []).map((t) => t.id)
+    documentReferences.value = (props.modelValue.documentReferences ?? []).map((d) => ({
+      guid: d.guid,
+      documentGuid: d.documentGuid,
+      url: d.url,
+      description: d.description
+    }))
+    newlyCreatedViewpoints.value = []
+  }
+)
+
+const persistBcfFields = async () => {
+  await updateTopic(props.modelValue.id, {
+    topicType: topicType.value,
+    topicStatus: topicStatus.value,
+    priority: priority.value,
+    stage: stage.value,
+    title: title.value,
+    dueDate: toBcfDueDateInput(dueDate.value),
+    assignedTo: assignedTo.value,
+    labels: labels.value,
+    referenceLinks: referenceLinks.value,
+    relatedTopicIds: relatedTopicIds.value,
+    documentReferences: documentReferences.value
+  })
+}
+
+const onReferenceLinksChanged = async (value: string[]) => {
+  referenceLinks.value = value
+  await persistBcfFields()
+}
+
+// BCF identities (emails) of who created / last modified the topic. Differ
+// from the Speckle author shown above when the topic came in through a BCF
+// sync (e.g. from the external BCF server).
+const bcfAuthorship = computed(() => {
+  const parts: string[] = []
+  if (props.modelValue.creationAuthor) {
+    parts.push(`Created by ${props.modelValue.creationAuthor}`)
+  }
+  if (props.modelValue.modifiedAuthor && props.modelValue.modifiedDate) {
+    parts.push(
+      `modified by ${props.modelValue.modifiedAuthor} on ${new Date(
+        props.modelValue.modifiedDate
+      ).toLocaleString()}`
+    )
+  }
+  return parts.join(', ')
+})
+
+const onBcfFieldChanged = async (
+  field:
+    | 'topicType'
+    | 'topicStatus'
+    | 'priority'
+    | 'stage'
+    | 'title'
+    | 'dueDate'
+    | 'assignedTo',
+  value: Nullable<string>
+) => {
+  const fieldRefs = {
+    topicType,
+    topicStatus,
+    priority,
+    stage,
+    title,
+    dueDate,
+    assignedTo
+  }
+  fieldRefs[field].value = value
+  await persistBcfFields()
+}
+
+const onTopicTypeChanged = (v: Nullable<string>) => onBcfFieldChanged('topicType', v)
+const onTopicStatusChanged = (v: Nullable<string>) =>
+  onBcfFieldChanged('topicStatus', v)
+const onPriorityChanged = (v: Nullable<string>) => onBcfFieldChanged('priority', v)
+const onStageChanged = (payload: { value: string }) =>
+  onBcfFieldChanged('stage', payload.value || null)
+const onTitleChanged = (payload: { value: string }) =>
+  onBcfFieldChanged('title', payload.value || null)
+const onDueDateChanged = (payload: { value: string }) =>
+  onBcfFieldChanged('dueDate', payload.value || null)
+const onAssignedToChanged = (payload: { value: string }) =>
+  onBcfFieldChanged('assignedTo', payload.value || null)
+
+const onLabelsChanged = async (value: string[]) => {
+  labels.value = value
+  await persistBcfFields()
+}
+
+const onRelatedTopicsChanged = async (value: string[]) => {
+  relatedTopicIds.value = value
+  await persistBcfFields()
+}
+
+const onRelatedTopicsSelectionChanged = (
+  selected?: { id: string }[] | { id: string }
+) => {
+  const items = Array.isArray(selected) ? selected : selected ? [selected] : []
+  onRelatedTopicsChanged(items.map((o) => o.id))
+}
+
+const addDocumentReference = () => {
+  documentReferences.value.push({ url: '', description: '' })
+}
+
+const removeDocumentReference = async (index: number) => {
+  documentReferences.value.splice(index, 1)
+  await persistBcfFields()
+}
+
+const onDocumentReferenceUrlChanged = (index: number, payload: { value: string }) => {
+  documentReferences.value[index].url = payload.value
+  persistBcfFields()
+}
+
+const onDocumentReferenceDescriptionChanged = (
+  index: number,
+  payload: { value: string }
+) => {
+  documentReferences.value[index].description = payload.value
+  persistBcfFields()
+}
 
 onClickOutside(threadContainer, (event) => {
   const viewerElement = document.getElementById('viewer')
@@ -281,11 +720,11 @@ const justCreatedReply = ref(false)
 
 const comments = computed(() => [
   props.modelValue,
-  ...props.modelValue.replies.items.slice().reverse()
+  ...props.modelValue.comments.items.slice().reverse()
 ])
 
 const showNewReplyComponent = computed(() => {
-  return !props.modelValue.archived && canReply.value && !isEmbedEnabled.value
+  return canReply.value && !isEmbedEnabled.value
 })
 
 const isExpanded = computed(() => isOpenThread(props.modelValue.id))
@@ -365,14 +804,20 @@ const threadStyle = computed(() => {
   // Use 62px bottom padding when in embed mode (to account for the bottom controls)
   const bottomPadding = isEmbedEnabled.value ? 62 : padding
 
-  // Ensure the element stays within the viewport
+  // Ensure the element stays within the viewport. The upper bound can fall
+  // below the lower one whenever the panel is taller/wider than the
+  // available space (e.g. this panel grew a lot with the BCF fields/
+  // viewpoint gallery) -- clamping the upper bound to never go below the
+  // lower one keeps the panel's top-left corner (its header/controls) always
+  // on-screen, letting it overflow off the bottom/right in that case
+  // instead of being pushed off-screen to the top/left.
   const constrainedX = Math.min(
     Math.max(padding, xOffset),
-    viewportWidth - threadWidth - padding
+    Math.max(padding, viewportWidth - threadWidth - padding)
   )
   const constrainedY = Math.min(
     Math.max(topPadding, yOffset),
-    viewportHeight - threadHeight - bottomPadding
+    Math.max(topPadding, viewportHeight - threadHeight - bottomPadding)
   )
 
   const transition = isDragged.value ? 'none' : props.modelValue.style.transition
@@ -386,7 +831,7 @@ const threadStyle = computed(() => {
 
 const threadAuthors = computed(() => {
   const authors = [props.modelValue.author]
-  for (const author of props.modelValue.replyAuthors.items) {
+  for (const author of props.modelValue.commentAuthors.items) {
     if (!authors.find((u) => u.id === author.id)) authors.push(author)
   }
   return authors
@@ -405,10 +850,6 @@ const actionsItems = computed<LayoutMenuItem[][]>(() => [
     }
   ]
 ])
-
-const canArchiveOrUnarchive = computed(
-  () => props.modelValue.permissions.canArchive.authorized
-)
 
 const onActionChosen = (params: { item: LayoutMenuItem; event: MouseEvent }) => {
   const { item } = params
@@ -438,33 +879,6 @@ const changeExpanded = async (newVal: boolean) => {
     name: 'toggle',
     status: newVal,
     source: 'bubble'
-  })
-}
-
-const toggleCommentResolvedStatus = async () => {
-  // Remove thread ID from URL when resolving
-  if (!props.modelValue.archived) {
-    await router.replace(() => {
-      const query = { ...router.currentRoute.value.query }
-      delete query.thread
-      return { query }
-    })
-  }
-
-  await archiveComment({
-    commentId: props.modelValue.id,
-    projectId: projectId.value,
-    archived: !props.modelValue.archived
-  })
-
-  mp.track('Comment Action', {
-    type: 'action',
-    name: 'archive',
-    status: props.modelValue.archived
-  })
-  triggerNotification({
-    title: `Thread ${props.modelValue.archived ? 'reopened.' : 'resolved.'}`,
-    type: ToastNotificationType.Info
   })
 }
 

@@ -58,3 +58,15 @@ export const navigationWorkspaceInvitesQuery = graphql(`
     }
   }
 `)
+
+export const navigationUserNotificationsQuery = graphql(`
+  query NavigationUserNotifications {
+    activeUser {
+      id
+      unreadNotificationCount
+      notifications(limit: 20) {
+        ...HeaderNavNotificationsUserNotification_UserNotification
+      }
+    }
+  }
+`)

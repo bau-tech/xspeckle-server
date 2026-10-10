@@ -357,14 +357,52 @@ export const Comments = buildTableHelper('comments', [
   'text',
   'screenshot',
   'data',
-  'archived',
-  'parentComment'
+  'parentComment',
+  'title',
+  'topicType',
+  'topicStatus',
+  'priority',
+  'stage',
+  'labels',
+  'dueDate',
+  'assignedTo',
+  'index',
+  'guid',
+  'creationAuthor',
+  'modifiedAuthor',
+  'modifiedDate',
+  'referenceLinks',
+  'bimSnippet',
+  'viewpointGuid'
 ])
+
+export const CommentRelatedTopics = buildTableHelper('comment_related_topics', [
+  'topicId',
+  'relatedTopicId'
+])
+
+export const CommentDocumentReferences = buildTableHelper(
+  'comment_document_references',
+  ['id', 'topicId', 'documentGuid', 'url', 'description', 'guid']
+)
 
 export const CommentLinks = buildTableHelper('comment_links', [
   'commentId',
   'resourceId',
   'resourceType'
+])
+
+export const TopicViewpoints = buildTableHelper('topic_viewpoints', [
+  'id',
+  'topicId',
+  'authorId',
+  'data',
+  'screenshot',
+  'createdAt',
+  'guid',
+  'index',
+  'bcf',
+  'snapshotType'
 ])
 
 export const CommentViews = buildTableHelper('comment_views', [
@@ -482,6 +520,18 @@ export const UserNotificationPreferences = buildTableHelper(
   'user_notification_preferences',
   ['userId', 'preferences']
 )
+
+export const UserNotifications = buildTableHelper('user_notifications', [
+  'id',
+  'type',
+  'read',
+  'userId',
+  'payload',
+  'version',
+  'sendEmailAt',
+  'createdAt',
+  'updatedAt'
+])
 
 export const Commits = buildTableHelper('commits', [
   'id',

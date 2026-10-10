@@ -94,7 +94,7 @@ graphql(`
     modelCount: models(limit: 0) {
       totalCount
     }
-    commentThreadCount: commentThreads(limit: 0) {
+    commentThreadCount: topics(limit: 0) {
       totalCount
     }
     workspace {
@@ -245,7 +245,7 @@ const pageTabItems = computed((): LayoutPageTabItem[] => {
       count: modelCount.value
     },
     {
-      title: 'Discussions',
+      title: 'BCF',
       id: 'discussions',
       count: commentCount.value
     }

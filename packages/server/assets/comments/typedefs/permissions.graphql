@@ -1,5 +1,9 @@
 type CommentPermissionChecks {
-  canArchive: PermissionCheckResult!
+  canEdit: PermissionCheckResult!
+}
+
+extend type Topic {
+  permissions: CommentPermissionChecks!
 }
 
 extend type Comment {

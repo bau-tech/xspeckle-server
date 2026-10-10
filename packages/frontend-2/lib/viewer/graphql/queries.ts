@@ -140,18 +140,36 @@ export const viewerDiffVersionsQuery = graphql(`
 export const viewerLoadedThreadsQuery = graphql(`
   query ViewerLoadedThreads(
     $projectId: String!
-    $filter: ProjectCommentsFilter!
+    $filter: ProjectTopicsFilter!
     $cursor: String
     $limit: Int
   ) {
     project(id: $projectId) {
       id
-      commentThreads(filter: $filter, cursor: $cursor, limit: $limit) {
+      topics(filter: $filter, cursor: $cursor, limit: $limit) {
         totalCount
-        totalArchivedCount
         items {
           ...ViewerCommentThread
           ...LinkableComment
+        }
+      }
+    }
+  }
+`)
+
+// Lightweight topic listing for the "related topics" picker -- deliberately
+// separate from viewerLoadedThreadsQuery (which pulls the full
+// ViewerCommentThread fragment for every loaded thread) since a picker only
+// needs id/title/rawText to render options, not comments/viewpoint/etc.
+export const projectTopicOptionsQuery = graphql(`
+  query ProjectTopicOptions($projectId: String!) {
+    project(id: $projectId) {
+      id
+      topics(limit: 100) {
+        items {
+          id
+          title
+          rawText
         }
       }
     }

@@ -8,8 +8,7 @@ import {
   streamResourceCheckFactory,
   createCommentFactory,
   createCommentReplyFactory,
-  editCommentFactory,
-  archiveCommentFactory
+  editCommentFactory
 } from '@/modules/comments/services/index'
 import type { SmartTextEditorValueSchema } from '@/modules/core/services/richTextEditorService'
 import { convertBasicStringToDocument } from '@/modules/core/services/richTextEditorService'
@@ -51,7 +50,6 @@ import {
 } from '@/modules/comments/repositories/comments'
 import { db } from '@/db/knex'
 import { getBlobsFactory } from '@/modules/blobstorage/repositories'
-import { getStreamFactory } from '@/modules/core/repositories/streams'
 import {
   createCommitByBranchIdFactory,
   createCommitByBranchNameFactory
@@ -99,7 +97,6 @@ import type { GetCommentsQueryVariables } from '@/modules/core/graph/generated/g
 import type { BasicTestStream } from '@/test/speckle-helpers/streamHelper'
 import { createTestStream } from '@/test/speckle-helpers/streamHelper'
 
-const getStream = getStreamFactory({ db })
 const streamResourceCheck = streamResourceCheckFactory({
   checkStreamResourceAccess: checkStreamResourceAccessFactory({ db })
 })
@@ -147,17 +144,10 @@ const createCommentReply = createCommentReplyFactory({
   getViewerResourcesForComment
 })
 const getComment = getCommentFactory({ db })
-const updateComment = updateCommentFactory({ db })
 const editComment = editCommentFactory({
   getComment,
   validateInputAttachments,
   updateComment: updateCommentFactory({ db }),
-  emitEvent: getEventBus().emit
-})
-const archiveComment = archiveCommentFactory({
-  getComment,
-  getStream,
-  updateComment,
   emitEvent: getEventBus().emit
 })
 const getComments = getCommentsLegacyFactory({ db })
@@ -566,19 +556,11 @@ describe('Comments @comments', () => {
       blobIds: []
     })
 
-    // we archive one of the object only comments for fun and profit
-    await archiveComment({
-      commentId: commentIds[commentIds.length - 1],
-      userId: user.id,
-      streamId: newStream.id,
-      archived: true
-    })
-
     const count = await getStreamCommentCount(newStream.id, { threadsOnly: true }) // should be 30
-    expect(count).to.equal(commCount * 3 - 1)
+    expect(count).to.equal(commCount * 3)
 
     const objCount = await getResourceCommentCount({ resourceId: obj.id })
-    expect(objCount).to.equal(commCount * 2 - 1)
+    expect(objCount).to.equal(commCount * 2)
 
     const commitCount = await getResourceCommentCount({ resourceId: commit.id })
     expect(commitCount).to.equal(commCount * 2)
@@ -1131,168 +1113,6 @@ describe('Comments @comments', () => {
     expect(commentText.doc).to.deep.equalInAnyOrder(properText)
   })
 
-  it('Should be able to archive a comment', async () => {
-    const { id: commentId } = await createComment({
-      userId: user.id,
-      input: {
-        streamId: stream.id,
-        resources: [{ resourceId: stream.id, resourceType: ResourceType.Stream }],
-        text: generateRandomCommentText(),
-        data: { justSome: crs({ length: 10 }) },
-        blobIds: []
-      }
-    })
-
-    let comment = await getComment({ id: commentId })
-    expect(comment!.archived).to.equal(false)
-
-    await archiveComment({
-      streamId: stream.id,
-      commentId,
-      userId: user.id,
-      archived: true
-    })
-
-    comment = await getComment({ id: commentId })
-    expect(comment!.archived).to.equal(true)
-
-    await archiveComment({
-      streamId: stream.id,
-      commentId,
-      userId: user.id,
-      archived: false
-    })
-
-    comment = await getComment({ id: commentId })
-    expect(comment!.archived).to.equal(false)
-  })
-
-  it('Should not be allowed to archive a not existing comment', async () => {
-    await archiveComment({
-      commentId: 'badabumm',
-      streamId: stream.id,
-      userId: user.id,
-      archived: true
-    })
-      .then(() => {
-        throw new Error('This should have been rejected')
-      })
-      .catch((error) =>
-        expect(error.message).to.be.equal(
-          'No comment badabumm exists, cannot change its archival status'
-        )
-      )
-  })
-
-  it("Should be forbidden to archive someone else's comment, unless the person is a stream admin", async () => {
-    const { id: commentId } = await createComment({
-      userId: user.id,
-      input: {
-        streamId: stream.id,
-        resources: [{ resourceId: stream.id, resourceType: ResourceType.Stream }],
-        text: generateRandomCommentText(),
-        data: { justSome: crs({ length: 10 }) },
-        blobIds: []
-      }
-    })
-
-    await archiveComment({
-      commentId,
-      streamId: stream.id,
-      userId: otherUser.id,
-      archived: true
-    })
-      .then(() => {
-        throw new Error('This should have been rejected')
-      })
-      .catch((error) =>
-        expect(error.message).to.be.equal(
-          "You don't have permission to archive the comment"
-        )
-      )
-
-    const { id: otherUsersCommentId } = await createComment({
-      userId: otherUser.id,
-      input: {
-        streamId: stream.id,
-        resources: [{ resourceId: stream.id, resourceType: ResourceType.Stream }],
-        text: generateRandomCommentText(),
-        data: { justSome: crs({ length: 10 }) },
-        blobIds: []
-      }
-    })
-    const archiveResult = await archiveComment({
-      commentId: otherUsersCommentId,
-      userId: user.id,
-      streamId: stream.id,
-      archived: true
-    })
-    expect(archiveResult).to.be.ok
-  })
-
-  it('Should not query archived comments unless asked', async () => {
-    const localObjectId = await createObject({
-      streamId: stream.id,
-      object: {
-        testObject: crs({ length: 10 })
-      }
-    })
-
-    const commentCount = 15
-    await Promise.all(
-      range(commentCount).map(() =>
-        createComment({
-          userId: user.id,
-          input: {
-            streamId: stream.id,
-            resources: [
-              { resourceId: localObjectId, resourceType: ResourceType.Object }
-            ],
-            text: generateRandomCommentText(),
-            data: { justSome: crs({ length: 10 }) },
-            blobIds: []
-          }
-        })
-      )
-    )
-
-    const archiveCount = 3
-    let comments = await getComments({
-      streamId: stream.id,
-      resources: [{ resourceId: localObjectId, resourceType: ResourceType.Object }],
-      limit: archiveCount
-    })
-    expect(comments.totalCount).to.be.equal(commentCount)
-
-    await Promise.all(
-      comments.items.map((comment) =>
-        archiveComment({
-          commentId: comment.id,
-          streamId: stream.id,
-          userId: user.id,
-          archived: true
-        })
-      )
-    )
-
-    comments = await getComments({
-      streamId: stream.id,
-      resources: [{ resourceId: localObjectId, resourceType: ResourceType.Object }],
-      limit: 100
-    })
-    expect(comments.totalCount).to.be.equal(commentCount - archiveCount)
-    expect(comments.items.length).to.be.equal(commentCount - archiveCount)
-
-    comments = await getComments({
-      streamId: stream.id,
-      resources: [{ resourceId: localObjectId, resourceType: ResourceType.Object }],
-      limit: 100,
-      archived: true
-    })
-    expect(comments.totalCount).to.be.equal(archiveCount)
-    expect(comments.items.length).to.be.equal(archiveCount)
-  })
-
   it('Should be able to write a short novel as comment text', async () => {
     const novelValue = buildCommentInputFromString(aShortNovel)
     const { id: commentId } = await createComment({
@@ -1606,20 +1426,20 @@ describe('Comments @comments', () => {
         )
 
         // Check first reply
-        expect(data?.comments?.items[0].replies?.items?.length || 0).to.eq(2)
+        expect(data?.comments?.items[0].comments?.items?.length || 0).to.eq(2)
         expect(
-          data?.comments?.items[0].replies.items[0].text?.attachments?.length || 0
+          data?.comments?.items[0].comments.items[0].comment?.attachments?.length || 0
         ).to.eq(1)
         expect(
-          data?.comments?.items[0].replies.items[0].text?.attachments?.[0]
+          data?.comments?.items[0].comments.items[0].comment?.attachments?.[0]
         ).to.deep.equalInAnyOrder(expectedMetadata)
 
         // Check 2nd reply
         expect(
-          data?.comments?.items[0].replies.items[1].text?.attachments?.length || 0
+          data?.comments?.items[0].comments.items[1].comment?.attachments?.length || 0
         ).to.eq(1)
         expect(
-          data?.comments?.items[0].replies.items[1].text?.attachments?.[0]
+          data?.comments?.items[0].comments.items[1].comment?.attachments?.[0]
         ).to.deep.equalInAnyOrder(expectedMetadata)
       })
 

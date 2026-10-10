@@ -3,7 +3,8 @@ import type { CommentRecord } from '@/modules/comments/helpers/types'
 import {
   insertCommentLinksFactory,
   insertCommentsFactory,
-  markCommentViewedFactory
+  markCommentViewedFactory,
+  bcfTopicRepositoriesFactory
 } from '@/modules/comments/repositories/comments'
 import { validateInputAttachmentsFactory } from '@/modules/comments/services/commentTextService'
 import { createCommentThreadAndNotifyFactory } from '@/modules/comments/services/management'
@@ -59,6 +60,7 @@ export const createTestComment = async (
     insertComments: insertCommentsFactory({ db: projectDb }),
     insertCommentLinks: insertCommentLinksFactory({ db: projectDb }),
     markCommentViewed: markCommentViewedFactory({ db: projectDb }),
+    ...bcfTopicRepositoriesFactory({ db: projectDb }),
     emitEvent: async () => {}
   })
 

@@ -97,7 +97,7 @@ export const projectPageLatestItemsModelItemFragment = graphql(`
     versionCount: versions(limit: 0) {
       totalCount
     }
-    commentThreadCount: commentThreads(limit: 0) {
+    commentThreadCount: topics(limit: 0) {
       totalCount
     }
     pendingImportedVersions(limit: 1) {
@@ -176,27 +176,27 @@ export const projectPageLatestItemsModelsFragment = graphql(`
 export const projectPageLatestItemsCommentsFragment = graphql(`
   fragment ProjectPageLatestItemsComments on Project {
     id
-    commentThreadCount: commentThreads(limit: 0) {
+    commentThreadCount: topics(limit: 0) {
       totalCount
     }
   }
 `)
 
 export const projectPageLatestItemsCommentItemFragment = graphql(`
-  fragment ProjectPageLatestItemsCommentItem on Comment {
+  fragment ProjectPageLatestItemsCommentItem on Topic {
     id
     author {
       ...FormUsersSelectItem
     }
     screenshot
+    title
     rawText
     createdAt
     updatedAt
-    archived
-    repliesCount: replies(limit: 0) {
+    repliesCount: comments(limit: 0) {
       totalCount
     }
-    replyAuthors(limit: 4) {
+    replyAuthors: commentAuthors(limit: 4) {
       totalCount
       items {
         ...FormUsersSelectItem

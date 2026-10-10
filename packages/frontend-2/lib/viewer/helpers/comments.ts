@@ -31,7 +31,7 @@ export function isValidCommentContentInput(input: CommentContentInput) {
 }
 
 graphql(`
-  fragment LinkableComment on Comment {
+  fragment LinkableComment on Topic {
     id
     viewerResources {
       modelId

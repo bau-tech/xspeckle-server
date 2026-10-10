@@ -1,0 +1,66 @@
+# Overrides for a single-host deployment, used on top of
+# the deps and speckle files. Secrets and everything specific to the host come
+# from .env: SPECKLE_HOSTNAME, LAN_IP.
+#
+#   docker compose -f docker-compose-deps.yml -f docker-compose-speckle.yml -f docker-compose.yml up -d <service>...
+#
+# Always name the services: the deps file defines many that are not run here.
+
+services:
+  speckle-frontend-2:
+    environment:
+      NUXT_PUBLIC_API_ORIGIN: "https://${SPECKLE_HOSTNAME:?Set SPECKLE_HOSTNAME}"
+      NUXT_PUBLIC_BASE_URL: "https://${SPECKLE_HOSTNAME:?Set SPECKLE_HOSTNAME}"
+      NUXT_PUBLIC_FF_NEXT_GEN_FILE_IMPORTER_ENABLED: "false"
+      NUXT_PUBLIC_FF_LEGACY_FILE_IMPORTS_ENABLED: "true"
+
+  speckle-server:
+    environment:
+      CANONICAL_URL: "https://${SPECKLE_HOSTNAME:?Set SPECKLE_HOSTNAME}"
+      FRONTEND_ORIGIN: "https://${SPECKLE_HOSTNAME:?Set SPECKLE_HOSTNAME}"
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET}"
+      POSTGRES_PASSWORD: "${SPECKLE_DB_PASSWORD:?Set SPECKLE_DB_PASSWORD}"
+      FILEIMPORT_QUEUE_POSTGRES_URL: "postgresql://speckle:${SPECKLE_DB_PASSWORD:?Set SPECKLE_DB_PASSWORD}@postgres/speckle"
+      S3_ACCESS_KEY: "${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}"
+      S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}"
+      S3_PUBLIC_ENDPOINT: "http://${LAN_IP:?Set LAN_IP}:9000"
+      FF_NEXT_GEN_FILE_IMPORTER_ENABLED: "false"
+      FF_LEGACY_FILE_IMPORTS_ENABLED: "true"
+
+  webhook-service:
+    environment:
+      PG_CONNECTION_STRING: "postgres://speckle:${SPECKLE_DB_PASSWORD:?Set SPECKLE_DB_PASSWORD}@postgres/speckle"
+
+  fileimport-service:
+    build:
+      context: .
+      dockerfile: packages/fileimport-service/Dockerfile
+    image: speckle/speckle-fileimport-service:local
+    restart: always
+    environment:
+      LOG_LEVEL: "info"
+      LOG_PRETTY: "true"
+      PG_CONNECTION_STRING: "postgres://speckle:${SPECKLE_DB_PASSWORD:?Set SPECKLE_DB_PASSWORD}@postgres/speckle"
+      SPECKLE_SERVER_URL: "http://speckle-server:3000"
+    depends_on:
+      speckle-server:
+        condition: service_healthy
+
+  ifc-import-server:
+    environment:
+      FILEIMPORT_QUEUE_POSTGRES_URL: "postgresql://speckle:${SPECKLE_DB_PASSWORD:?Set SPECKLE_DB_PASSWORD}@postgres/speckle"
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: "${SPECKLE_DB_PASSWORD:?Set SPECKLE_DB_PASSWORD}"
+
+  minio:
+    image: minio/minio:local
+    entrypoint: ["/minio"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}"
+    ports:
+      - "${LAN_IP:?Set LAN_IP}:9000:9000"
+

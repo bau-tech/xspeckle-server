@@ -5,6 +5,54 @@ WORKDIR /app
 COPY packages/fileimport-service/src/ifc-dotnet .
 RUN dotnet publish ifc-converter.csproj -c Release -o output/
 
+# Builds the `rvt` Python wheel (github.com/DrunkOnJava/rvt-rs, Apache-2.0,
+# clean-room Revit reader, no Autodesk software involved) used by
+# src/rvt/import_file.py. Built from a pinned upstream commit rather than
+# installed from PyPI: our patches below (Revit 2025 beam axes, saved
+# display meshes from Python) are not in a release, and upstream main moves
+# well ahead of its releases. Only the wheel reaches the runtime image. Same
+# OS as the runtime stage.
+FROM ubuntu:24.04 AS rvt-build-stage
+WORKDIR /build
+
+# hadolint ignore=DL3008
+RUN apt-get update -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+     --no-install-recommends \
+     ca-certificates \
+     curl \
+     git \
+     gcc \
+     libc6-dev \
+     python3 \
+     python3-pip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG RUST_TOOLCHAIN=1.98.1
+ARG MATURIN_VERSION=1.15.0
+ENV PATH=/root/.cargo/bin:${PATH}
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN} \
+    && pip install --break-system-packages --no-cache-dir maturin==${MATURIN_VERSION}
+
+# rvt-rs main as of 2026-10-05 (past v0.4.0: Revit 2023 projects, curved and
+# tapered walls, stairs, ceilings, shafts, steel I sections, pipes, rooms,
+# materials and property sets) -- verified against the magnetar, IFC-ECS RE1
+# and Autodesk rac/rst basic sample projects of 2023-2025. Was 3503a604ea
+# (2026-10-03).
+ARG RVT_RS_GIT_URL=https://github.com/DrunkOnJava/rvt-rs.git
+ARG RVT_RS_REVISION=120e2f9ffa8422ba437102c8d300b7e902cdde80
+RUN git clone --filter=blob:none ${RVT_RS_GIT_URL} . \
+    && git checkout ${RVT_RS_REVISION}
+# Our own small patches on top of that commit (see each patch for why);
+# `git apply` fails the build if one no longer applies after a bump.
+COPY packages/fileimport-service/src/rvt/rvt-rs-patches /rvt-rs-patches
+RUN git apply --verbose /rvt-rs-patches/*.patch
+# The build is memory hungry and small hosts running this can be tight on RAM
+ARG CARGO_BUILD_JOBS=2
+RUN CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} maturin build --release --out /wheels
+
 FROM mcr.microsoft.com/dotnet/runtime:8.0-noble AS runtime
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -12,26 +60,21 @@ WORKDIR /speckle-server
 
 # configure tini
 ARG TINI_VERSION=v0.19.0
-ARG SPECKLE_IFC_VERSION=0.2.2
 
 # hadolint ignore=DL3008
 RUN apt-get update -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
      --no-install-recommends \
-     ca-certificates=20240203 \
-     curl=8.5.0-2ubuntu10.9 \
-     gosu=1.17-1ubuntu0.24.04.3 \
-    && curl -L -o speckleifc.tar.gz https://github.com/specklesystems/speckleifc/archive/refs/tags/v${SPECKLE_IFC_VERSION}.tar.gz \
-    && mkdir speckleifc \
-    && tar --strip-components=1 -C speckleifc -xzf speckleifc.tar.gz speckleifc-${SPECKLE_IFC_VERSION} \
-    && rm speckleifc.tar.gz \
+     ca-certificates \
+     curl \
+     gosu \
     && curl -fsSL https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini -o /usr/bin/tini \
     && chmod +x /usr/bin/tini \
     && curl -fsSL https://deb.nodesource.com/setup_22.x -o nodesource_setup.sh \
     && gosu root:root bash nodesource_setup.sh \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
      --no-install-recommends \
-     nodejs=22.14.0-1nodesource1 \
+     nodejs \
     && npm install -g corepack@0.30.0 \
     && corepack enable \
     && DEBIAN_FRONTEND=noninteractive apt-get remove curl -y \
@@ -58,13 +101,18 @@ RUN yarn workspaces foreach -Wt run build
 RUN apt-get update -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
      --no-install-recommends \
-     python3.12=3.12.3-1ubuntu0.13 \
-     python3-pip=24.0+dfsg-1ubuntu1.3 \
+     python3.12 \
+     python3-pip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 COPY packages/fileimport-service/requirements.txt /speckle-server/
 RUN pip install --break-system-packages --disable-pip-version-check --no-cache-dir --requirement /speckle-server/requirements.txt
+
+# rvt, built from source in rvt-build-stage above
+COPY --from=rvt-build-stage /wheels /tmp/rvt-wheels
+RUN pip install --break-system-packages --disable-pip-version-check --no-cache-dir /tmp/rvt-wheels/*.whl \
+    && rm -rf /tmp/rvt-wheels
 
 # Consume the ARG from the global scope
 ARG NODE_ENV

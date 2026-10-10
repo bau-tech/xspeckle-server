@@ -1,7 +1,7 @@
 import crs from 'crypto-random-string'
 import { ForbiddenError, ResourceMismatch } from '@/modules/shared/errors'
 import { buildCommentTextFromInput } from '@/modules/comments/services/commentTextService'
-import { isNonNullable, Roles } from '@speckle/shared'
+import { isNonNullable } from '@speckle/shared'
 import type {
   ResourceIdentifier,
   CommentCreateInput,
@@ -24,7 +24,6 @@ import type {
   ValidateInputAttachments
 } from '@/modules/comments/domain/operations'
 import type { ResourceType } from '@/modules/comments/domain/types'
-import type { GetStream } from '@/modules/core/domain/streams/operations'
 import type { EventBusEmit } from '@/modules/shared/services/eventBus'
 import { CommentEvents } from '@/modules/comments/domain/events'
 import type { JSONContent } from '@tiptap/core'
@@ -226,7 +225,7 @@ export const createCommentReplyFactory =
         comment: newComment,
         isThread: false,
         input: {
-          threadId: parentCommentId,
+          topicId: parentCommentId,
           projectId: streamId,
           content: {
             blobIds,
@@ -281,52 +280,4 @@ export const editCommentFactory =
     })
 
     return updatedComment
-  }
-
-/**
- * @deprecated Use 'archiveCommentAndNotify()'
- */
-export const archiveCommentFactory =
-  (deps: {
-    getComment: GetComment
-    getStream: GetStream
-    updateComment: UpdateComment
-    emitEvent: EventBusEmit
-  }) =>
-  async ({
-    commentId,
-    userId,
-    streamId,
-    archived = true
-  }: {
-    commentId: string
-    userId: string
-    streamId: string
-    archived: boolean
-  }) => {
-    const comment = await deps.getComment({ id: commentId })
-    if (!comment)
-      throw new CommentNotFoundError(
-        `No comment ${commentId} exists, cannot change its archival status`
-      )
-
-    const streamWithRole = await deps.getStream({ streamId, userId })
-
-    if (comment.authorId !== userId) {
-      if (!streamWithRole || streamWithRole.role !== Roles.Stream.Owner)
-        throw new ForbiddenError("You don't have permission to archive the comment")
-    }
-
-    const updatedComment = await deps.updateComment(commentId, { archived })
-
-    await deps.emitEvent({
-      eventName: CommentEvents.Archived,
-      payload: {
-        userId,
-        input: { archived, commentId, streamId },
-        comment: updatedComment!
-      }
-    })
-
-    return updatedComment!
   }

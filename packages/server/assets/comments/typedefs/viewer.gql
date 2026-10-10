@@ -1,9 +1,16 @@
-extend type Comment {
+extend type Topic {
   """
   Legacy comment viewer data field
   """
   data: JSONObject @deprecated(reason: "Use the new viewerState field instead")
 
+  """
+  SerializedViewerState
+  """
+  viewerState: JSONObject
+}
+
+extend type Comment {
   """
   SerializedViewerState
   """

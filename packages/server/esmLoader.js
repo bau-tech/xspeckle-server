@@ -68,8 +68,11 @@ export async function resolve(specifier, _context, nextResolve) {
     }
   }
 
-  // If it was a dir import also, try that with extensions
-  specifier = isDirImport ? path.join(specifier, 'index') : specifier
+  // If it was a dir import also, try that with extensions.
+  // Note: path.join() would strip a leading './'/'../', turning a relative
+  // specifier into a bare one (node_modules-style resolution) -- so this
+  // appends '/index' directly instead of going through path.join().
+  specifier = isDirImport ? specifier.replace(/\/+$/, '') + '/index' : specifier
   for (const ext of extensions) {
     try {
       return await nextResolve(specifier + ext)

@@ -1,3 +1,36 @@
+# xspeckle-server
+
+**This is a fork of [Speckle Server](https://github.com/specklesystems/speckle-server)**, maintained independently by [bau-tech](https://github.com/bau-tech). It is not affiliated with, endorsed by or supported by Speckle (AEC Systems Ltd.). For the original project, its documentation and its community, go to the upstream repository.
+
+The fork is based on upstream commit [`51d43b91c`](https://github.com/specklesystems/speckle-server/commit/51d43b91c) (15 June 2026).
+
+## What this fork changes
+
+A side-by-side comparison of the two deployments, including what is not compatible, is in [`COMPARISON.md`](COMPARISON.md). In short:
+
+- **More file types can be uploaded** (`packages/fileimport-service`):
+  - Revit `.rvt`, experimental, read with [rvt-rs](https://github.com/DrunkOnJava/rvt-rs) without Revit;
+  - SketchUp `.skp`, read with [OpenSKP](https://github.com/iamahsanmehmood/openskp);
+  - Rhino `.3dm`, read with [rhino3dm](https://github.com/mcneel/rhino3dm);
+  - `.ifczip`.
+- **IFC uploads use Speckle's current IFC converter**, `speckleifc` as shipped in specklepy 2026.8.1, through the legacy file import path.
+- **BCF**: viewer comments are stored as BCF 3.0 topics, comments and viewpoints, with editing in the viewer, assignment notifications, and import and export of `.bcf` / `.bcfzip` archives.
+- **Deployment**: `docker-compose.yml` is an example override for a single-host Docker Compose setup.
+
+The importers are listed, with what each one reads and produces, under [Importers in `packages/fileimport-service/README.md`](packages/fileimport-service/README.md#importers).
+
+## Licence
+
+The licensing is that of upstream and is set out in [`LICENSE`](LICENSE): Apache License 2.0, except for `packages/server/modules/workspaces` and `packages/server/modules/gatekeeper`, which are under the Speckle Enterprise Edition licence. This fork does not modify those two directories. The fork's own changes are published under the Apache License 2.0.
+
+Third-party material added by the fork is listed in [`packages/fileimport-service/src/rvt/steel/THIRD_PARTY_NOTICES.md`](packages/fileimport-service/src/rvt/steel/THIRD_PARTY_NOTICES.md) and [`packages/frontend-2/THIRD_PARTY_NOTICES.md`](packages/frontend-2/THIRD_PARTY_NOTICES.md).
+
+Speckle is a trademark of AEC Systems Ltd.; Revit, SketchUp, Rhino and BCF are trademarks of their respective owners.
+
+The upstream README follows.
+
+---
+
 <h1 align="center">
   <img src="https://user-images.githubusercontent.com/2679513/131189167-18ea5fe1-c578-47f6-9785-3748178e4312.png" width="150px"/><br/>
   Speckle | Server

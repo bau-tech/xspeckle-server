@@ -24,7 +24,7 @@ import {
 import { Vector3 } from 'three'
 import { useAuthManager } from '~~/lib/auth/composables/auth'
 import type { ViewerResourceItem } from '~~/lib/common/generated/gql/graphql'
-import { ProjectCommentsUpdatedMessageType } from '~~/lib/common/generated/gql/graphql'
+import { ProjectTopicsUpdatedMessageType } from '~~/lib/common/generated/gql/graphql'
 import {
   useInjectedViewerState,
   useInjectedViewerInterfaceState
@@ -312,71 +312,40 @@ function useViewerSubscriptionEventTracker() {
       loadedVersionsOnly: computed(() => threadFilters.value.loadedVersionsOnly)
     },
     (event, cache) => {
-      const isArchived = event.type === ProjectCommentsUpdatedMessageType.Archived
-      const isNew = event.type === ProjectCommentsUpdatedMessageType.Created
-      const comment = event.comment
+      const isNew = event.type === ProjectTopicsUpdatedMessageType.Created
+      const topic = event.topic
+      const parentTopicId = event.parentTopicId
 
-      if (isArchived) {
-        // Mark as archived
-        cache.modify({
-          id: getCacheId('Comment', event.id),
-          fields: {
-            archived: () => true
-          }
-        })
-
-        // Remove from project.commentThreads
+      if (isNew && parentTopicId) {
+        // Add reply to parent topic
+        modifyObjectField(
+          cache,
+          getCacheId('Topic', parentTopicId),
+          'comments',
+          ({ helpers: { createUpdatedValue, ref } }) =>
+            createUpdatedValue(({ update }) => {
+              update('totalCount', (totalCount) => totalCount + 1)
+              update('items', (items) => [ref('Comment', event.id), ...items])
+            })
+        )
+      } else if (isNew && topic) {
+        // Add new topic
         modifyObjectField(
           cache,
           getCacheId('Project', projectId.value),
-          'commentThreads',
-          ({ variables, helpers: { createUpdatedValue, readField } }) => {
-            if (variables.filter?.includeArchived) return // we want it in that list
+          'topics',
+          ({ helpers: { ref, createUpdatedValue, readField }, value }) => {
+            const includesItem = value.items?.find(
+              (i) => readField(i, 'id') === topic.id
+            )
+            if (includesItem) return
 
             return createUpdatedValue(({ update }) => {
-              update('totalCount', (totalCount) => totalCount - 1)
-              update('items', (items) =>
-                items.filter((i) => readField(i, 'id') !== event.id)
-              )
+              update('totalCount', (totalCount) => totalCount + 1)
+              update('items', (items) => [ref('Topic', topic.id), ...items])
             })
           }
         )
-      } else if (isNew && comment) {
-        const parentId = comment.parent?.id
-
-        // Add reply to parent
-        if (parentId) {
-          modifyObjectField(
-            cache,
-            getCacheId('Comment', parentId),
-            'replies',
-            ({ helpers: { createUpdatedValue, ref } }) =>
-              createUpdatedValue(({ update }) => {
-                update('totalCount', (totalCount) => totalCount + 1)
-                update('items', (items) => [ref('Comment', comment.id), ...items])
-              })
-          )
-        } else {
-          // Add comment thread
-          modifyObjectField(
-            cache,
-            getCacheId('Project', projectId.value),
-            'commentThreads',
-            ({ helpers: { ref, createUpdatedValue, readField }, value }) => {
-              // In case this is actually an unarchived comment, we only want to add it if it doesnt
-              // exist in the includesArchived list already
-              const includesItem = value.items?.find(
-                (i) => readField(i, 'id') === comment.id
-              )
-              if (includesItem) return
-
-              return createUpdatedValue(({ update }) => {
-                update('totalCount', (totalCount) => totalCount + 1)
-                update('items', (items) => [ref('Comment', comment.id), ...items])
-              })
-            }
-          )
-        }
       }
     }
   )

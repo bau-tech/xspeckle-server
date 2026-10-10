@@ -37,6 +37,10 @@ export const StreamActionTypes = Object.freeze(<const>{
     Create: 'comment_created',
     Archive: 'comment_archived',
     Reply: 'comment_replied',
+    /** A BCF topic or comment was edited (fields, text, viewpoints). */
+    Update: 'comment_updated',
+    /** A BCF topic (with its comments) or a single comment was deleted. */
+    Delete: 'comment_deleted',
     Mention: 'comment_mention'
   },
   Branch: {

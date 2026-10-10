@@ -1,14 +1,14 @@
 import type { ApolloCache } from '@apollo/client/cache'
 import type { JSONContent } from '@tiptap/core'
-import { useApolloClient, useSubscription } from '@vue/apollo-composable'
+import { useApolloClient, useQuery, useSubscription } from '@vue/apollo-composable'
 import type { MaybeRef } from '@vueuse/core'
 import dayjs from 'dayjs'
 import type { Get } from 'type-fest'
 import { useActiveUser } from '~~/lib/auth/composables/activeUser'
 import type {
-  ArchiveCommentInput,
   CommentContentInput,
-  CreateCommentReplyInput,
+  CreateCommentInput,
+  DocumentReferenceInput,
   OnViewerCommentsUpdatedSubscription,
   ViewerResourceItem
 } from '~~/lib/common/generated/gql/graphql'
@@ -18,11 +18,13 @@ import {
   getFirstErrorMessage
 } from '~~/lib/common/helpers/graphql'
 import {
-  archiveCommentMutation,
   createCommentReplyMutation,
   createCommentThreadMutation,
-  markCommentViewedMutation
+  createViewpointMutation,
+  markCommentViewedMutation,
+  updateTopicMutation
 } from '~~/lib/viewer/graphql/mutations'
+import { projectTopicOptionsQuery } from '~~/lib/viewer/graphql/queries'
 import { onViewerCommentsUpdatedSubscription } from '~~/lib/viewer/graphql/subscriptions'
 import {
   useInjectedViewerState,
@@ -91,14 +93,14 @@ export function useMarkThreadViewed() {
         variables: {
           input: {
             projectId,
-            commentId: threadId
+            topicId: threadId
           }
         },
         update: (cache, { data }) => {
-          if (!data?.commentMutations.markViewed) return
+          if (!data?.topicMutations.markViewed) return
 
           cache.modify({
-            id: getCacheId('Comment', threadId),
+            id: getCacheId('Topic', threadId),
             fields: {
               viewedAt: () => dayjs().toISOString()
             }
@@ -111,13 +113,27 @@ export function useMarkThreadViewed() {
       logger.error('Marking thread as viewed failed', errors)
     }
 
-    return !!data?.commentMutations.markViewed
+    return !!data?.topicMutations.markViewed
   }
 }
 
 export type CommentEditorValue = {
   doc?: JSONContent | null
   attachments?: SuccessfullyUploadedFileItem[] | null
+}
+
+export type BcfTopicProperties = {
+  topicType?: MaybeNullOrUndefined<string>
+  topicStatus?: MaybeNullOrUndefined<string>
+  priority?: MaybeNullOrUndefined<string>
+  stage?: MaybeNullOrUndefined<string>
+  title?: MaybeNullOrUndefined<string>
+  labels?: MaybeNullOrUndefined<string[]>
+  referenceLinks?: MaybeNullOrUndefined<string[]>
+  dueDate?: MaybeNullOrUndefined<string>
+  assignedTo?: MaybeNullOrUndefined<string>
+  relatedTopicIds?: MaybeNullOrUndefined<string[]>
+  documentReferences?: MaybeNullOrUndefined<DocumentReferenceInput[]>
 }
 
 export function useSubmitComment() {
@@ -133,7 +149,7 @@ export function useSubmitComment() {
   const { triggerNotification } = useGlobalToast()
   const { serialize } = useStateSerialization()
 
-  return async (content: CommentContentInput) => {
+  return async (content: CommentContentInput, bcfFields?: BcfTopicProperties) => {
     if (!isLoggedIn.value) return null
     if (!isValidCommentContentInput(content)) return null
     const screenshot = await viewerInstance.screenshot()
@@ -147,14 +163,15 @@ export function useSubmitComment() {
             resourceIdString: resourceIdString.value,
             content,
             viewerState: serialize({ concreteResourceIdString: true }),
-            screenshot
+            screenshot,
+            ...bcfFields
           }
         }
       })
       .catch(convertThrowIntoFetchResult)
 
-    if (data?.commentMutations.create) {
-      return data.commentMutations.create
+    if (data?.topicMutations.create) {
+      return data.topicMutations.create
     }
 
     const errMsg = getFirstErrorMessage(errors)
@@ -168,12 +185,115 @@ export function useSubmitComment() {
   }
 }
 
+export function useUpdateTopic() {
+  const { projectId } = useInjectedViewerState()
+  const { isLoggedIn } = useActiveUser()
+  const client = useApolloClient().client
+  const { triggerNotification } = useGlobalToast()
+
+  return async (topicId: string, bcfFields: BcfTopicProperties) => {
+    if (!isLoggedIn.value) return null
+
+    const { data, errors } = await client
+      .mutate({
+        mutation: updateTopicMutation,
+        variables: {
+          input: {
+            topicId,
+            projectId: projectId.value,
+            ...bcfFields
+          }
+        }
+      })
+      .catch(convertThrowIntoFetchResult)
+
+    if (data?.topicMutations.update) {
+      return data.topicMutations.update
+    }
+
+    const errMsg = getFirstErrorMessage(errors)
+    triggerNotification({
+      type: ToastNotificationType.Danger,
+      title: 'Topic update failed',
+      description: errMsg
+    })
+
+    return null
+  }
+}
+
+/**
+ * Saves the viewer's CURRENT camera/selection/clipping state as a new,
+ * independently-addressable viewpoint on an existing topic -- additional to
+ * (not replacing) the topic's own original creation-time viewpoint. Mirrors
+ * useSubmitComment()'s screenshot/serialize pattern.
+ */
+export function useCreateViewpoint() {
+  const {
+    projectId,
+    viewer: { instance: viewerInstance }
+  } = useInjectedViewerState()
+  const { isLoggedIn } = useActiveUser()
+  const client = useApolloClient().client
+  const { triggerNotification } = useGlobalToast()
+  const { serialize } = useStateSerialization()
+
+  return async (topicId: string) => {
+    if (!isLoggedIn.value) return null
+    const screenshot = await viewerInstance.screenshot()
+
+    const { data, errors } = await client
+      .mutate({
+        mutation: createViewpointMutation,
+        variables: {
+          input: {
+            topicId,
+            projectId: projectId.value,
+            viewerState: serialize({ concreteResourceIdString: true }),
+            screenshot
+          }
+        }
+      })
+      .catch(convertThrowIntoFetchResult)
+
+    if (data?.topicMutations.createViewpoint) {
+      return data.topicMutations.createViewpoint
+    }
+
+    const errMsg = getFirstErrorMessage(errors)
+    triggerNotification({
+      type: ToastNotificationType.Danger,
+      title: 'Viewpoint creation failed',
+      description: errMsg
+    })
+
+    return null
+  }
+}
+
+/**
+ * Lightweight id/title options for every topic in the current project, for
+ * a "related topics" picker -- deliberately not the full ViewerCommentThread
+ * fragment already loaded elsewhere, since a picker only needs enough to
+ * label each option.
+ */
+export function useProjectTopicOptions() {
+  const { projectId } = useInjectedViewerState()
+  const { result } = useQuery(projectTopicOptionsQuery, () => ({
+    projectId: projectId.value
+  }))
+
+  const topicOptions = computed(() => result.value?.project?.topics.items ?? [])
+
+  return { topicOptions }
+}
+
 export function useSubmitReply() {
   const { isLoggedIn } = useActiveUser()
   const client = useApolloClient().client
   const { triggerNotification } = useGlobalToast()
 
-  return async (input: CreateCommentReplyInput) => {
+  return async (input: CreateCommentInput) => {
     if (!isLoggedIn.value) return null
     if (!isValidCommentContentInput(input.content)) return null
 
@@ -186,8 +306,8 @@ export function useSubmitReply() {
       })
       .catch(convertThrowIntoFetchResult)
 
-    if (data?.commentMutations.reply) {
-      return data.commentMutations.reply
+    if (data?.topicMutations.comment) {
+      return data.topicMutations.comment
     }
 
     const errMsg = getFirstErrorMessage(errors)
@@ -198,38 +318,6 @@ export function useSubmitReply() {
     })
 
     return null
-  }
-}
-
-export function useArchiveComment() {
-  const { isLoggedIn } = useActiveUser()
-  const client = useApolloClient().client
-  const { triggerNotification } = useGlobalToast()
-
-  return async (input: ArchiveCommentInput) => {
-    const { commentId, projectId } = input
-
-    if (!isLoggedIn.value || !commentId || !projectId) return false
-
-    const { data, errors } = await client
-      .mutate({
-        mutation: archiveCommentMutation,
-        variables: {
-          input
-        }
-      })
-      .catch(convertThrowIntoFetchResult)
-
-    if (data?.commentMutations.archive) return true
-
-    const errMsg = getFirstErrorMessage(errors)
-    triggerNotification({
-      type: ToastNotificationType.Danger,
-      title: 'Comment archival failed',
-      description: errMsg
-    })
-
-    return false
   }
 }
 

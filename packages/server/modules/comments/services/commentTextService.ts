@@ -31,6 +31,26 @@ export const validateInputAttachmentsFactory =
   }
 
 /**
+ * Build a Topic's text (its BCF description) from a ProseMirror doc. Unlike a
+ * comment's text, a BCF topic description is optional -- an empty doc is
+ * stored as an empty description instead of being rejected.
+ */
+export function buildTopicDescriptionFromInput(
+  params: Partial<{ doc: JSONContent | null; blobIds: string[] }>
+): SmartTextEditorValueSchema {
+  const { doc, blobIds = [] } = params
+  if ((!isTextEditorDoc(doc) || isDocEmpty(doc)) && !blobIds.length) {
+    return {
+      version: COMMENT_SCHEMA_VERSION,
+      type: COMMENT_SCHEMA_TYPE,
+      doc: { type: 'doc', content: [] },
+      blobIds: []
+    }
+  }
+  return buildCommentTextFromInput(params)
+}
+
+/**
  * Build comment.text value from a ProseMirror doc
  */
 export function buildCommentTextFromInput({

@@ -46,7 +46,8 @@ import {
   insertCommentLinksFactory,
   insertCommentsFactory,
   markCommentUpdatedFactory,
-  markCommentViewedFactory
+  markCommentViewedFactory,
+  bcfTopicRepositoriesFactory
 } from '@/modules/comments/repositories/comments'
 import { getBlobsFactory } from '@/modules/blobstorage/repositories'
 import { validateInputAttachmentsFactory } from '@/modules/comments/services/commentTextService'
@@ -165,6 +166,7 @@ const command: CommandModule<
       insertComments,
       insertCommentLinks,
       markCommentViewed,
+      ...bcfTopicRepositoriesFactory({ db: projectDb }),
       emitEvent: getEventBus().emit
     })
     const createCommentReplyAndNotify = createCommentReplyAndNotifyFactory({
@@ -173,6 +175,7 @@ const command: CommandModule<
       insertComments,
       insertCommentLinks,
       markCommentUpdated: markCommentUpdatedFactory({ db: projectDb }),
+      ...bcfTopicRepositoriesFactory({ db: projectDb }),
       emitEvent: getEventBus().emit,
       getViewerResourcesForComment: getViewerResourcesForCommentFactory({
         getCommentsResources: getCommentsResourcesFactory({ db: projectDb }),

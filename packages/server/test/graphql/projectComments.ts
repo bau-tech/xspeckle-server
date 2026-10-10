@@ -1,20 +1,54 @@
 import gql from 'graphql-tag'
 
-export const basicProjectCommentFragment = gql`
-  fragment BasicProjectComment on Comment {
+export const basicProjectTopicFragment = gql`
+  fragment BasicProjectTopic on Topic {
     id
     rawText
     text {
       doc
     }
     authorId
+    title
+    topicType
+    topicStatus
+    priority
+    stage
+    labels
+    dueDate
+    assignedTo
+    index
+    serverAssignedId
   }
+`
+
+export const basicProjectCommentFragment = gql`
+  fragment BasicProjectComment on Comment {
+    id
+    rawComment
+    comment {
+      doc
+    }
+    authorId
+    topicId
+  }
+`
+
+export const createProjectTopicMutation = gql`
+  mutation CreateProjectTopic($input: CreateTopicInput!) {
+    topicMutations {
+      create(input: $input) {
+        ...BasicProjectTopic
+      }
+    }
+  }
+
+  ${basicProjectTopicFragment}
 `
 
 export const createProjectCommentMutation = gql`
   mutation CreateProjectComment($input: CreateCommentInput!) {
-    commentMutations {
-      create(input: $input) {
+    topicMutations {
+      comment(input: $input) {
         ...BasicProjectComment
       }
     }
@@ -23,26 +57,26 @@ export const createProjectCommentMutation = gql`
   ${basicProjectCommentFragment}
 `
 
-export const createProjectCommentReplyMutation = gql`
-  mutation CreateProjectCommentReply($input: CreateCommentReplyInput!) {
-    commentMutations {
-      reply(input: $input) {
-        ...BasicProjectComment
+export const updateProjectTopicMutation = gql`
+  mutation UpdateProjectTopic($input: UpdateTopicInput!) {
+    topicMutations {
+      update(input: $input) {
+        ...BasicProjectTopic
       }
     }
-
-    ${basicProjectCommentFragment}
   }
+
+  ${basicProjectTopicFragment}
 `
 
-export const editProjectCommentMutation = gql`
-  mutation EditProjectComment($input: EditCommentInput!) {
-    commentMutations {
-      edit(input: $input) {
+export const updateProjectCommentMutation = gql`
+  mutation UpdateProjectComment($input: UpdateCommentInput!) {
+    topicMutations {
+      updateComment(input: $input) {
         ...BasicProjectComment
       }
     }
-
-    ${basicProjectCommentFragment}
   }
+
+  ${basicProjectCommentFragment}
 `

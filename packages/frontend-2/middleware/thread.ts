@@ -6,7 +6,7 @@ import { getLinkToThread } from '~/lib/viewer/helpers/comments'
 const resolveLinkQuery = graphql(`
   query ResolveCommentLink($commentId: String!, $projectId: String!) {
     project(id: $projectId) {
-      comment(id: $commentId) {
+      topic(id: $commentId) {
         id
         ...LinkableComment
       }
@@ -29,7 +29,7 @@ export default defineParallelizedNuxtRouteMiddleware(async (to) => {
     })
     .catch(convertThrowIntoFetchResult)
 
-  const comment = res.data?.project?.comment
+  const comment = res.data?.project?.topic
   if (!comment) {
     return abortNavigation(
       createError({

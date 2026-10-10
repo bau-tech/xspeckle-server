@@ -25,7 +25,6 @@ graphql(`
 
 const props = defineProps<{
   project: ProjectDiscussionsPageResults_ProjectFragment
-  includeArchived: boolean
 }>()
 
 const {
@@ -36,13 +35,12 @@ const {
   query: latestCommentThreadsQuery,
   baseVariables: computed(() => ({
     projectId: props.project.id,
-    filter: { includeArchived: !!props.includeArchived },
     cursor: null as Nullable<string>
   })),
   resolveKey: (vars) => {
-    return { projectId: vars.projectId, ...vars.filter }
+    return { projectId: vars.projectId }
   },
-  resolveCurrentResult: (res) => res?.project.commentThreads,
+  resolveCurrentResult: (res) => res?.project.topics,
   resolveNextPageVariables: (baseVars, cursor) => ({
     ...baseVars,
     cursor
@@ -50,7 +48,5 @@ const {
   resolveCursorFromVariables: (vars) => vars.cursor
 })
 
-const hasItems = computed(
-  () => !!(result.value?.project?.commentThreads.items || []).length
-)
+const hasItems = computed(() => !!(result.value?.project?.topics.items || []).length)
 </script>

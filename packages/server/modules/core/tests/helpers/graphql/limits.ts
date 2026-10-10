@@ -5,7 +5,7 @@ import { gql } from 'graphql-tag'
  */
 
 export const limitedPersonalProjectCommentFragment = gql`
-  fragment LimitedPersonalProjectComment on Comment {
+  fragment LimitedPersonalProjectComment on Topic {
     id
     rawText
     createdAt
@@ -22,7 +22,7 @@ export const limitedPersonalProjectVersionFragment = gql`
     createdAt
     message
     referencedObject
-    commentThreads {
+    topics {
       totalCount
       items {
         ...LimitedPersonalProjectComment
@@ -91,7 +91,7 @@ export const getLimitedPersonalStreamCommitsQuery = gql`
 export const getLimitedPersonalProjectCommentsQuery = gql`
   query GetLimitedPersonalProjectComments($projectId: String!) {
     project(id: $projectId) {
-      commentThreads {
+      topics {
         totalCount
         items {
           ...LimitedPersonalProjectComment
@@ -106,7 +106,7 @@ export const getLimitedPersonalProjectCommentsQuery = gql`
 export const getLimitedPersonalProjectCommentQuery = gql`
   query GetLimitedPersonalProjectComment($projectId: String!, $commentId: String!) {
     project(id: $projectId) {
-      comment(id: $commentId) {
+      topic(id: $commentId) {
         ...LimitedPersonalProjectComment
       }
     }

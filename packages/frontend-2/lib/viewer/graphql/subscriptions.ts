@@ -23,11 +23,9 @@ export const onViewerCommentsUpdatedSubscription = graphql(`
     projectCommentsUpdated(target: $target) {
       id
       type
-      comment {
+      parentTopicId
+      topic {
         id
-        parent {
-          id
-        }
         ...ViewerCommentThread
       }
     }

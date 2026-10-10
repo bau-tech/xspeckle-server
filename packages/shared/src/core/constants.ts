@@ -328,6 +328,8 @@ export const WebhookTriggers = Object.freeze(<const>{
   CommentCreated: 'comment_created',
   CommentArchived: 'comment_archived',
   CommentReplied: 'comment_replied',
+  CommentUpdated: 'comment_updated',
+  CommentDeleted: 'comment_deleted',
   StreamPermissionsAdd: 'stream_permissions_add',
   StreamPermissionsRemove: 'stream_permissions_remove'
 })

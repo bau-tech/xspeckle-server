@@ -88,4 +88,4 @@ packages/*/.tshy/
 .vite-node
 
 .nuxt
-.output
+.output%temp%/

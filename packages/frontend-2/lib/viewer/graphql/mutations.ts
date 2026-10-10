@@ -15,16 +15,16 @@ export const broadcastViewerUserActivityMutation = graphql(`
 `)
 
 export const markCommentViewedMutation = graphql(`
-  mutation MarkCommentViewed($input: MarkCommentViewedInput!) {
-    commentMutations {
+  mutation MarkCommentViewed($input: MarkTopicViewedInput!) {
+    topicMutations {
       markViewed(input: $input)
     }
   }
 `)
 
 export const createCommentThreadMutation = graphql(`
-  mutation CreateCommentThread($input: CreateCommentInput!) {
-    commentMutations {
+  mutation CreateCommentThread($input: CreateTopicInput!) {
+    topicMutations {
       create(input: $input) {
         ...ViewerCommentThread
       }
@@ -33,19 +33,34 @@ export const createCommentThreadMutation = graphql(`
 `)
 
 export const createCommentReplyMutation = graphql(`
-  mutation CreateCommentReply($input: CreateCommentReplyInput!) {
-    commentMutations {
-      reply(input: $input) {
+  mutation CreateCommentReply($input: CreateCommentInput!) {
+    topicMutations {
+      comment(input: $input) {
         ...ViewerCommentsReplyItem
       }
     }
   }
 `)
 
-export const archiveCommentMutation = graphql(`
-  mutation ArchiveComment($input: ArchiveCommentInput!) {
-    commentMutations {
-      archive(input: $input)
+export const updateTopicMutation = graphql(`
+  mutation UpdateTopic($input: UpdateTopicInput!) {
+    topicMutations {
+      update(input: $input) {
+        ...ViewerCommentThread
+      }
+    }
+  }
+`)
+
+export const createViewpointMutation = graphql(`
+  mutation CreateViewpoint($input: CreateViewpointInput!) {
+    topicMutations {
+      createViewpoint(input: $input) {
+        id
+        guid
+        snapshot
+        viewerState
+      }
     }
   }
 `)

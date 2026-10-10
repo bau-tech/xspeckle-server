@@ -121,7 +121,20 @@ export function useStateSerialization() {
           position: state.ui.camera.position.value.toArray(),
           target: state.ui.camera.target.value.toArray(),
           isOrthoProjection: state.ui.camera.isOrthoProjection.value,
-          zoom: (get(camControls, '_zoom') as unknown as number) || 1 // kinda hacky, _zoom is a protected prop
+          zoom: (get(camControls, '_zoom') as unknown as number) || 1, // kinda hacky, _zoom is a protected prop
+          direction: new Vector3()
+            .subVectors(state.ui.camera.target.value, state.ui.camera.position.value)
+            .normalize()
+            .toArray(),
+          upVector: [0, 1, 0], // viewer is always Y-up
+          fieldOfView: (get(camControls, 'camera.fov') as unknown as number) || 60, // kinda hacky, same as _zoom above
+          viewToWorldScale: null
+        },
+        bcf: {
+          clippingPlanes: [],
+          defaultVisibility: true,
+          visibilityExceptions: [],
+          coloring: []
         },
         viewMode: {
           mode: state.ui.viewMode.mode.value,

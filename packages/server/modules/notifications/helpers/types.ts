@@ -108,3 +108,47 @@ export type ActivityDigestMessage = NotificationMessage<
   NotificationType.ActivityDigest,
   ActivityDigestData
 >
+
+/**
+ * In-app notifications (the header bell), stored in user_notifications. Separate
+ * from the Bull-queued NotificationType above, which only drives emails.
+ */
+export const UserNotificationType = {
+  /**
+   * A BCF topic got assigned to the user -- same event, recipient rule and message
+   * as the external BCF server's bell, so the two feeds agree. That server also
+   * sends the email for it, Speckle doesn't.
+   */
+  BcfTopicAssigned: 'bcfTopicAssigned'
+} as const
+
+export type UserNotificationType =
+  (typeof UserNotificationType)[keyof typeof UserNotificationType]
+
+export type BcfTopicAssignedPayload = {
+  projectId: string
+  topicId: string
+  topicGuid: string
+  /** Topic title when the notification was created. */
+  topicTitle: string
+  /** BCF identity (an email) of whoever made the assignment, if known. */
+  actor: string | null
+}
+
+export type UserNotificationPayloadMap = {
+  [UserNotificationType.BcfTopicAssigned]: BcfTopicAssignedPayload
+}
+
+export type UserNotificationRecord<
+  T extends UserNotificationType = UserNotificationType
+> = {
+  id: string
+  type: T
+  read: boolean
+  userId: string
+  payload: UserNotificationPayloadMap[T]
+  version: string
+  sendEmailAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}

@@ -110,7 +110,7 @@ const onSubmit = async () => {
   try {
     await createReply({
       content,
-      threadId: threadId.value,
+      topicId: threadId.value,
       projectId: projectId.value
     })
     updateIsTyping(false)

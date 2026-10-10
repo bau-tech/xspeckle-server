@@ -8,10 +8,12 @@ import type { CommentRecord } from '@/modules/comments/helpers/types'
  * These are registered in the server's codegen.yml
  */
 
-export type CommentReplyAuthorCollectionGraphQLReturn = {
+export type CommentAuthorCollectionGraphQLReturn = {
   totalCount: number
   authorIds: string[]
 }
+
+export type TopicGraphQLReturn = CommentRecord
 
 export type CommentGraphQLReturn = CommentRecord
 

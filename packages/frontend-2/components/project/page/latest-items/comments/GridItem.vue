@@ -23,7 +23,6 @@
     </div>
     <div class="flex items-center w-full px-3 h-8 -mt-10 relative">
       <UserAvatarGroup
-        v-if="!thread.archived"
         v-tippy="
           `${thread.author.name} ${
             allAvatars.length !== 1 ? '& ' + (allAvatars.length - 1) + ' others' : ''
@@ -32,13 +31,12 @@
         :users="allAvatars"
         :max-count="4"
       />
-      <CheckCircleIcon v-else class="w-8 h-8 text-primary" />
     </div>
     <div class="w-full" :class="isLimited ? 'h-14' : 'h-16'">
       <div class="flex flex-col w-full h-full">
         <div class="mt-2 py-2 px-4 bg-foundation border-t h-full">
           <div v-if="!isLimited" class="truncate text-body-xs text-foreground">
-            {{ thread.rawText }}
+            {{ thread.title || thread.rawText }}
           </div>
           <div class="space-x-2" :class="isLimited ? 'mt-0.5' : ''">
             <span class="text-body-2xs font-medium text-primary">
@@ -62,7 +60,6 @@ import type {
 import { useCommentScreenshotImage } from '~~/lib/projects/composables/previewImage'
 import { times } from 'lodash-es'
 import { getLightLinkToThread } from '~~/lib/viewer/helpers/comments'
-import { CheckCircleIcon } from '@heroicons/vue/24/solid'
 import type { AvatarUserWithId } from '@speckle/ui-components'
 
 const props = defineProps<{
@@ -76,9 +73,9 @@ const { screenshot } = useCommentScreenshotImage(
 )
 const { formattedRelativeDate, formattedFullDate } = useDateFormatters()
 
-const isLimited = computed(() => {
-  return !props.thread.rawText
-})
+// null = withheld by the plan's history limit; '' = just an empty (optional
+// in BCF) description.
+const isLimited = computed(() => props.thread.rawText === null)
 
 const hiddenReplyAuthorCount = computed(
   () => props.thread.replyAuthors.totalCount - props.thread.replyAuthors.items.length

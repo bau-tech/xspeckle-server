@@ -1,0 +1,52 @@
+"""
+An in-app notification, shown in the header's notification bell.
+"""
+type UserNotification {
+  id: String!
+  """
+  Currently only "bcfTopicAssigned".
+  """
+  type: String!
+  read: Boolean!
+  createdAt: DateTime!
+  """
+  One-line text, e.g. 'jane@example.org assigned you to "Clash at grid B3"'.
+  """
+  message: String!
+  projectId: String
+  """
+  The BCF topic the notification is about, if any.
+  """
+  topicId: String
+  topicGuid: String
+  topicTitle: String
+  """
+  Display name (or BCF identity) of whoever triggered the notification.
+  """
+  actorName: String
+}
+
+extend type User {
+  """
+  Newest first.
+  """
+  notifications(limit: Int! = 20, unreadOnly: Boolean! = false): [UserNotification!]!
+    @isOwner
+  unreadNotificationCount: Int! @isOwner
+}
+
+type UserNotificationMutations {
+  """
+  Returns how many were marked read.
+  """
+  markRead(ids: [String!]!): Int!
+  markAllRead: Int!
+  """
+  Deletes all of the user's already read notifications, returns how many.
+  """
+  clearRead: Int!
+}
+
+extend type ActiveUserMutations {
+  notifications: UserNotificationMutations!
+}

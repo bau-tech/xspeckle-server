@@ -43,7 +43,17 @@ describe('Viewer State helpers', () => {
             position: [0, 0, 0],
             target: [0, 0, 0],
             isOrthoProjection: false,
-            zoom: 1
+            zoom: 1,
+            direction: null,
+            upVector: [0, 1, 0],
+            fieldOfView: 60,
+            viewToWorldScale: null
+          },
+          bcf: {
+            clippingPlanes: [],
+            defaultVisibility: true,
+            visibilityExceptions: [],
+            coloring: []
           },
           viewMode: {
             mode: 0,
@@ -109,6 +119,63 @@ describe('Viewer State helpers', () => {
       ).toThrow(UnformattableSerializedViewerStateError)
     })
 
+    it('fills BCF viewpoint defaults when absent', () => {
+      const partial = {
+        projectId: 'pid',
+        viewer: { metadata: {} },
+        resources: { request: { resourceIdString: 'rid' } },
+        ui: {
+          camera: { position: [1, 2, 3], target: [4, 5, 6] }
+        }
+      }
+      const formatted = formatSerializedViewerState(partial as any)
+      expect(formatted.ui.camera.direction).toBeNull()
+      expect(formatted.ui.camera.upVector).toEqual([0, 1, 0])
+      expect(formatted.ui.camera.fieldOfView).toBe(60)
+      expect(formatted.ui.camera.viewToWorldScale).toBeNull()
+      expect(formatted.ui.bcf.clippingPlanes).toEqual([])
+      expect(formatted.ui.bcf.defaultVisibility).toBe(true)
+      expect(formatted.ui.bcf.visibilityExceptions).toEqual([])
+      expect(formatted.ui.bcf.coloring).toEqual([])
+    })
+
+    it('passes explicit BCF viewpoint values through unchanged', () => {
+      const partial = {
+        projectId: 'pid',
+        viewer: { metadata: {} },
+        resources: { request: { resourceIdString: 'rid' } },
+        ui: {
+          camera: {
+            position: [1, 2, 3],
+            target: [4, 5, 6],
+            direction: [0, 0, -1],
+            upVector: [0, 0, 1],
+            fieldOfView: 45,
+            viewToWorldScale: 2.5
+          },
+          bcf: {
+            clippingPlanes: [{ location: [0, 0, 0], direction: [1, 0, 0] }],
+            defaultVisibility: false,
+            visibilityExceptions: ['guid-1'],
+            coloring: [{ ifcGuid: 'guid-2', color: 'FF0000' }]
+          }
+        }
+      }
+      const formatted = formatSerializedViewerState(partial as any)
+      expect(formatted.ui.camera.direction).toEqual([0, 0, -1])
+      expect(formatted.ui.camera.upVector).toEqual([0, 0, 1])
+      expect(formatted.ui.camera.fieldOfView).toBe(45)
+      expect(formatted.ui.camera.viewToWorldScale).toBe(2.5)
+      expect(formatted.ui.bcf.clippingPlanes).toEqual([
+        { location: [0, 0, 0], direction: [1, 0, 0] }
+      ])
+      expect(formatted.ui.bcf.defaultVisibility).toBe(false)
+      expect(formatted.ui.bcf.visibilityExceptions).toEqual(['guid-1'])
+      expect(formatted.ui.bcf.coloring).toEqual([
+        { ifcGuid: 'guid-2', color: 'FF0000' }
+      ])
+    })
+
     it('handles legacy selectedObjectIds', () => {
       const partial = {
         projectId: 'pid',
@@ -157,7 +224,17 @@ describe('Viewer State helpers', () => {
             position: [0, 0, 0],
             target: [0, 0, 0],
             isOrthoProjection: false,
-            zoom: 1
+            zoom: 1,
+            direction: null,
+            upVector: [0, 1, 0],
+            fieldOfView: 60,
+            viewToWorldScale: null
+          },
+          bcf: {
+            clippingPlanes: [],
+            defaultVisibility: true,
+            visibilityExceptions: [],
+            coloring: []
           },
           viewMode: {
             mode: 0,
@@ -218,7 +295,17 @@ describe('Viewer State helpers', () => {
               position: [0, 0, 0],
               target: [0, 0, 0],
               isOrthoProjection: false,
-              zoom: 1
+              zoom: 1,
+              direction: null,
+              upVector: [0, 1, 0],
+              fieldOfView: 60,
+              viewToWorldScale: null
+            },
+            bcf: {
+              clippingPlanes: [],
+              defaultVisibility: true,
+              visibilityExceptions: [],
+              coloring: []
             },
             viewMode: {
               mode: 0,
