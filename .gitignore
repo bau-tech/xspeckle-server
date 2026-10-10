@@ -89,3 +89,6 @@ packages/*/.tshy/
 
 .nuxt
 .output%temp%/
+
+# Local adjustments to the single-host deployment (see install.sh)
+docker-compose.local.yml

@@ -84,12 +84,15 @@ xspeckle-server adds six migrations to the comments module. They add the BCF fie
 
 | | Original | xspeckle-server |
 | --- | --- | --- |
-| Docker images | published by Speckle | none published; build them from this repository |
+| Docker images | published by Speckle | none published; `./install.sh` builds them on your machine |
+| Installing | follow Speckle's deployment documentation | `./install.sh` writes the settings, builds, starts and waits until the server answers |
 | Compose files | `docker-compose-deps.yml`, `docker-compose-speckle.yml` | the same two, plus `docker-compose.yml` as an override for a single host |
 | Import service | `ifc-import-service` | `fileimport-service` |
 | Building the import image | | takes longer: the Revit reader is compiled from source |
+| Object storage image | `minio/minio` from Docker Hub, which can no longer be pulled | `cgr.dev/chainguard/minio`, or the one named in `MINIO_IMAGE` |
+| Ports open on the host | web, plus database, cache and storage on `127.0.0.1` | web only |
 
-The override reads its secrets and host-specific values from an `.env` file next to it.
+The override reads its secrets and host-specific values from an `.env` file next to it, which the install script writes. See [Run it](README.md#run-it).
 
 ## What is the same
 

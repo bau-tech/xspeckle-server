@@ -15,9 +15,41 @@ A side-by-side comparison of the two deployments, including what is not compatib
   - `.ifczip`.
 - **IFC uploads use Speckle's current IFC converter**, `speckleifc` as shipped in specklepy 2026.8.1, through the legacy file import path.
 - **BCF**: viewer comments are stored as BCF 3.0 topics, comments and viewpoints, with editing in the viewer, assignment notifications, and import and export of `.bcf` / `.bcfzip` archives.
-- **Deployment**: `docker-compose.yml` is an example override for a single-host Docker Compose setup.
+- **Deployment**: `install.sh` builds and runs everything on a single host with Docker Compose; see [Run it](#run-it).
 
 The importers are listed, with what each one reads and produces, under [Importers in `packages/fileimport-service/README.md`](packages/fileimport-service/README.md#importers).
+
+## Run it
+
+No Docker images are published for this fork; `install.sh` builds them on your machine and starts the server.
+
+You need a Linux machine with [Docker Engine](https://docs.docker.com/engine/install/) and its Compose plugin (2.24 or newer), about 8 GB of memory and 30 GB of free disk.
+
+```bash
+git clone https://github.com/bau-tech/xspeckle-server.git
+cd xspeckle-server
+./install.sh
+```
+
+The script asks for the address people will open in their browser and for the port to listen on, writes an `.env` file with freshly generated secrets, builds the images, starts the services and waits until the server answers. The first build takes a long time, 30 minutes or more, because the Revit reader and the web frontend are compiled from source. When it finishes, open the address and register: the first account becomes the server administrator.
+
+To run it without questions: `./install.sh --url http://192.168.1.20:8080 --port 8080 --yes`.
+
+| Command | What it does |
+| --- | --- |
+| `./install.sh` | First install. Run it again after updating the code to rebuild and restart; the existing `.env` and all data are kept. |
+| `./install.sh status` | Shows the services. |
+| `./install.sh logs [service]` | Follows the logs, of one service if you name it. |
+| `./install.sh stop` / `start` | Stops or starts everything. Data is kept. |
+
+Things to know:
+
+- **HTTPS.** The server itself speaks plain HTTP. For an `https://` address, put a reverse proxy that handles TLS in front of it and let it forward to the port you chose, websockets included.
+- **Data** lives in three Docker volumes: `xspeckle_postgres-data`, `xspeckle_minio-data` and `xspeckle_redis-data`. Back up the first two.
+- **Only the web port is open.** The database, cache and object storage are reachable from the other containers only.
+- **Object storage** is MinIO, pulled as `cgr.dev/chainguard/minio`. To use another MinIO image, set `MINIO_IMAGE` in `.env`.
+- **Your own changes** to the Compose setup go in a `docker-compose.local.yml` next to the other files; the script picks it up and git ignores it.
+- **Email** is not configured, so the server sends no invitations or password resets until you add the `EMAIL_*` settings described in Speckle's documentation.
 
 ## Licence
 
