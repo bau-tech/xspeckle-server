@@ -29,7 +29,7 @@ function buildServerMjmlPreamble(params: Parameters<BuildInviteEmailContents>[0]
   <br />
   ${inviter.name} has just sent you this invitation to join the <b>${
     serverInfo.name
-  }</b> Speckle Server!
+  }</b> xSpeckle!
   ${message ? inviter.name + ' said: <em>"' + message + '"</em>' : ''}
   </mj-text>
   `
@@ -49,7 +49,7 @@ function buildServerTextPreamble(params: Parameters<BuildInviteEmailContents>[0]
 
 ${inviter.name} has just sent you this invitation to join the ${
     serverInfo.name
-  } Speckle Server!
+  } xSpeckle!
 
 ${message ? inviter.name + ' said: "' + sanitizeMessage(message, true) + '"' : ''}`
 

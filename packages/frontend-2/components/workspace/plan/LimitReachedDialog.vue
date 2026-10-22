@@ -22,7 +22,7 @@
 
         <div class="absolute top-0 left-0 w-full h-full z-10">
           <div class="flex flex-col justify-between h-full px-5 py-4">
-            <NuxtImg src="/images/logo.png" alt="Speckle logo" class="h-8 w-8" />
+            <NuxtImg src="/images/logo.png" alt="xSpeckle logo" class="h-8 w-8" />
             <h3 class="text-white limit-reached-text-shadow text-base">
               Plan limit reached
             </h3>

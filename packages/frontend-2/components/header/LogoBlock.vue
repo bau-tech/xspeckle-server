@@ -8,7 +8,7 @@
     <img
       class="h-8 w-8 block mr-1"
       src="~~/assets/images/speckle_logo_big.png"
-      alt="Speckle"
+      alt="xSpeckle"
     />
 
     <div
@@ -16,7 +16,7 @@
       class="text-sm mt-0 font-medium"
       :class="showTextOnMobile ? '' : 'hidden md:flex'"
     >
-      Speckle
+      xSpeckle
     </div>
   </Component>
 </template>

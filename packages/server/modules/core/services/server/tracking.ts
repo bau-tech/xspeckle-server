@@ -46,7 +46,7 @@ export const updateServerMixpanelProfileFactory =
     const properties = {
       URL: hostname,
       Company: serverInfo.company || null,
-      $name: serverInfo.name || 'Speckle Server',
+      $name: serverInfo.name || 'xSpeckle',
       $email: serverInfo.adminContact || null,
       Description: serverInfo.description || null,
       Version: serverInfo.version || null,

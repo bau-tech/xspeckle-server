@@ -2,8 +2,8 @@
   <mj-column>
     <mj-image
       width="40px"
-      src="<%- params.serverInfo.canonicalUrl -%>/static/speckle-email-logo.png?v=1"
-      alt="Speckle"
+      src="<%- params.serverInfo.canonicalUrl -%>/static/speckle-email-logo.png?v=2"
+      alt="xSpeckle"
     />
   </mj-column>
 </mj-section>

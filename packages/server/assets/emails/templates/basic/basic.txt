@@ -3,4 +3,4 @@
 <%_ if (params.text?.bodyEnd?.length) print("\n" + params.text.bodyEnd + "\n"); _%>
 
 ------------------------------------------------------
-Sent from <%= params.server.name || 'Speckle Server' %> at <%= params.server.url %>, deployed and managed by <%= params.server.company %>. Your admin contact is <%= params.server.contact %>.
+Sent from <%= params.server.name || 'xSpeckle' %> at <%= params.server.url %>, deployed and managed by <%= params.server.company %>. Your admin contact is <%= params.server.contact %>.

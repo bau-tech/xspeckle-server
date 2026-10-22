@@ -488,7 +488,7 @@ export async function startHttp(params: {
     const port = isString(address) ? null : address?.port
 
     startupLogger.info(
-      `🚀 My name is Speckle Server, and I'm running at ${addressString}:${port}`
+      `🚀 My name is xSpeckle, and I'm running at ${addressString}:${port}`
     )
     app.emit('appStarted')
   })

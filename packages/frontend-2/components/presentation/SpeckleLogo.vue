@@ -12,10 +12,10 @@
       <img
         class="size-6 block mr-[0.5px] ml-0.5"
         src="~~/assets/images/speckle_logo_big.png"
-        alt="Speckle"
+        alt="xSpeckle"
       />
 
-      <div class="text-body-xs mt-0 font-medium">Speckle</div>
+      <div class="text-body-xs mt-0 font-medium">xSpeckle</div>
     </NuxtLink>
   </PresentationFloatingPanel>
 </template>
