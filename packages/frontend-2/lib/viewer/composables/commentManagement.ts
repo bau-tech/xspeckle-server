@@ -152,7 +152,8 @@ export function useSubmitComment() {
 
   return async (content: CommentContentInput, bcfFields?: BcfTopicProperties) => {
     if (!isLoggedIn.value) return null
-    if (!isValidCommentContentInput(content)) return null
+    // A BCF topic needs a title or a description, not necessarily both.
+    if (!isValidCommentContentInput(content) && !bcfFields?.title?.trim()) return null
     const screenshot = await viewerInstance.screenshot()
 
     const { data, errors } = await client

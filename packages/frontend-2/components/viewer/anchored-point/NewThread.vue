@@ -235,6 +235,7 @@ import {
   toBcfDueDateInput
 } from '~~/lib/viewer/helpers/bcf'
 import { useMixpanel } from '~~/lib/core/composables/mp'
+import { ToastNotificationType, useGlobalToast } from '~~/lib/common/composables/toast'
 import { useThreadUtilities, useSelectionUtilities } from '~~/lib/viewer/composables/ui'
 import { useEmbed } from '~/lib/viewer/composables/setup/embed'
 import { useServerFileUploadLimit } from '~~/lib/common/composables/serverInfo'
@@ -384,12 +385,26 @@ const onThreadClick = () => {
 
 const mp = useMixpanel()
 
+const { triggerNotification } = useGlobalToast()
+
 const onSubmit = (comment?: CommentEditorValue) => {
   comment ||= comment || commentValue.value
-  if (!comment?.doc) return
-
-  const content = convertCommentEditorValueToInput(commentValue.value)
-  if (!isValidCommentContentInput(content)) return
+  const written =
+    comment?.doc || comment?.attachments?.length
+      ? convertCommentEditorValueToInput(commentValue.value)
+      : null
+  const hasText = !!written && isValidCommentContentInput(written)
+  // A BCF topic needs a title or a description, not necessarily both.
+  const topicTitle = title.value?.trim() || null
+  if (!hasText && !topicTitle) {
+    triggerNotification({
+      type: ToastNotificationType.Info,
+      title: 'Nothing to post yet',
+      description: 'Write a comment, or give the topic a title under "Add details".'
+    })
+    return
+  }
+  const content = hasText ? written! : { doc: { type: 'doc', content: [] } }
 
   isPostingNewThread.value = true
   pauseAutomaticUpdates.value = true
@@ -399,7 +414,7 @@ const onSubmit = (comment?: CommentEditorValue) => {
     topicStatus: topicStatus.value,
     priority: priority.value,
     stage: stage.value,
-    title: title.value,
+    title: topicTitle,
     dueDate: toBcfDueDateInput(dueDate.value),
     assignedTo: assignedTo.value,
     labels: labels.value,
@@ -428,7 +443,7 @@ const onSubmit = (comment?: CommentEditorValue) => {
 
   mp.track('Comment Action', { type: 'action', name: 'create' })
   // Marking all uploads as in use to prevent cleanup
-  comment.attachments?.forEach((a) => {
+  comment?.attachments?.forEach((a) => {
     a.inUse = true
   })
 }
