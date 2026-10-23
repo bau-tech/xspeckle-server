@@ -1,3 +1,4 @@
+import { gql } from '@apollo/client/core'
 import type { ApolloCache } from '@apollo/client/cache'
 import type { JSONContent } from '@tiptap/core'
 import { useApolloClient, useQuery, useSubscription } from '@vue/apollo-composable'
@@ -219,6 +220,48 @@ export function useUpdateTopic() {
     })
 
     return null
+  }
+}
+
+// Plain document (not the codegen'd graphql()): topicMutations.delete has no
+// generated operation yet.
+const deleteTopicMutation = gql`
+  mutation ViewerDeleteTopic($input: DeleteTopicInput!) {
+    topicMutations {
+      delete(input: $input)
+    }
+  }
+`
+
+/**
+ * Permanently deletes a topic with its comments and viewpoints. A BCF server
+ * the model syncs with deletes it on the next sync too.
+ */
+export function useDeleteTopic() {
+  const { projectId } = useInjectedViewerState()
+  const client = useApolloClient().client
+  const { triggerNotification } = useGlobalToast()
+
+  return async (topicId: string) => {
+    const { data, errors } = await client
+      .mutate<{ topicMutations: { delete: boolean } }>({
+        mutation: deleteTopicMutation,
+        variables: { input: { topicId, projectId: projectId.value } }
+      })
+      .catch(convertThrowIntoFetchResult)
+
+    if (data?.topicMutations.delete) {
+      client.cache.evict({ id: client.cache.identify({ __typename: 'Topic', id: topicId }) })
+      client.cache.gc()
+      return true
+    }
+
+    triggerNotification({
+      type: ToastNotificationType.Danger,
+      title: 'Could not delete the topic',
+      description: getFirstErrorMessage(errors)
+    })
+    return false
   }
 }
 

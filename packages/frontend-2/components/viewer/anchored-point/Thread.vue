@@ -328,6 +328,19 @@
         </div>
       </ViewerCommentsPortalOrDiv>
     </div>
+    <LayoutDialog
+      v-model:open="confirmDelete"
+      max-width="sm"
+      :buttons="deleteButtons"
+    >
+      <template #header>Delete topic</template>
+      <p class="text-body-xs text-foreground">
+        Delete
+        <span class="font-medium">{{ modelValue.title || 'this topic' }}</span>
+        with all its comments and viewpoints? This cannot be undone. A BCF server this
+        model syncs with deletes it too.
+      </p>
+    </LayoutDialog>
   </div>
 </template>
 <script setup lang="ts">
@@ -353,6 +366,7 @@ import {
   useMarkThreadViewed,
   useCommentContext,
   useUpdateTopic,
+  useDeleteTopic,
   useProjectTopicOptions,
   useCreateViewpoint
 } from '~~/lib/viewer/composables/commentManagement'
@@ -378,10 +392,14 @@ import { useThreadUtilities } from '~~/lib/viewer/composables/ui'
 import { useEmbed } from '~/lib/viewer/composables/setup/embed'
 import { graphql } from '~/lib/common/generated/gql'
 import type { LayoutMenuItem } from '~~/lib/layout/helpers/components'
+import type { LayoutDialogButton } from '@speckle/ui-components'
 
 enum ActionTypes {
   CopyLink = 'copy-link',
-  PopIn = 'pop-in'
+  PopIn = 'pop-in',
+  CloseTopic = 'close-topic',
+  ReopenTopic = 'reopen-topic',
+  DeleteTopic = 'delete-topic'
 }
 
 graphql(`
@@ -454,6 +472,9 @@ const { threadResourceStatus, hasClickedFullContext, goBack, handleContextClick 
 const { isOpenThread, open, closeAllThreads } = useThreadUtilities()
 const menuId = useId()
 const updateTopic = useUpdateTopic()
+const deleteTopic = useDeleteTopic()
+const confirmDelete = ref(false)
+const isDeleting = ref(false)
 const createViewpoint = useCreateViewpoint()
 const applyState = useApplySerializedState()
 
@@ -837,6 +858,8 @@ const threadAuthors = computed(() => {
   return authors
 })
 
+const isClosed = computed(() => topicStatus.value?.toLowerCase() === 'closed')
+
 const actionsItems = computed<LayoutMenuItem[][]>(() => [
   [
     {
@@ -848,7 +871,41 @@ const actionsItems = computed<LayoutMenuItem[][]>(() => [
       id: ActionTypes.PopIn,
       disabled: !isDragged.value
     }
+  ],
+  [
+    {
+      title: isClosed.value ? 'Reopen topic' : 'Close topic',
+      id: isClosed.value ? ActionTypes.ReopenTopic : ActionTypes.CloseTopic,
+      disabled: !isLoggedIn.value
+    },
+    {
+      title: 'Delete topic…',
+      id: ActionTypes.DeleteTopic,
+      disabled: !isLoggedIn.value
+    }
   ]
+])
+
+const onDeleteConfirmed = async () => {
+  if (isDeleting.value) return
+  isDeleting.value = true
+  try {
+    if (!(await deleteTopic(props.modelValue.id))) return
+    confirmDelete.value = false
+    await changeExpanded(false)
+    triggerNotification({ type: ToastNotificationType.Success, title: 'Topic deleted' })
+  } finally {
+    isDeleting.value = false
+  }
+}
+
+const deleteButtons = computed((): LayoutDialogButton[] => [
+  { text: 'Cancel', props: { color: 'outline' }, onClick: () => (confirmDelete.value = false) },
+  {
+    text: 'Delete',
+    props: { color: 'danger', disabled: isDeleting.value, loading: isDeleting.value },
+    onClick: onDeleteConfirmed
+  }
 ])
 
 const onActionChosen = (params: { item: LayoutMenuItem; event: MouseEvent }) => {
@@ -862,6 +919,18 @@ const onActionChosen = (params: { item: LayoutMenuItem; event: MouseEvent }) => 
     case ActionTypes.PopIn:
       showMenu.value = false
       isDragged.value = false
+      break
+    case ActionTypes.CloseTopic:
+      showMenu.value = false
+      void onTopicStatusChanged('Closed')
+      break
+    case ActionTypes.ReopenTopic:
+      showMenu.value = false
+      void onTopicStatusChanged('Open')
+      break
+    case ActionTypes.DeleteTopic:
+      showMenu.value = false
+      confirmDelete.value = true
       break
   }
 }
