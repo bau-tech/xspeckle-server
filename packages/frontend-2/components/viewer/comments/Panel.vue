@@ -36,6 +36,7 @@
           class="hidden"
           @change="onBcfFileChosen"
         />
+        <ViewerCommentsBcfServerDialog v-if="isBcfSyncEnabled" v-model:open="bcfServerOpen" />
       </div>
     </template>
     <div class="flex flex-col h-full">
@@ -68,7 +69,8 @@ enum ActionTypes {
   LoadedVersionsOnly = 'loaded-versions-only',
   ImportBcf = 'import-bcf',
   ExportBcf21 = 'export-bcf-2.1',
-  ExportBcf30 = 'export-bcf-3.0'
+  ExportBcf30 = 'export-bcf-3.0',
+  BcfServer = 'bcf-server'
 }
 
 graphql(`
@@ -108,6 +110,10 @@ const {
 const menuId = useId()
 const { busy: bcfBusy, exportBcf, importBcf } = useViewerBcfTransfer()
 const bcfFileInput = ref<HTMLInputElement>()
+const isBcfSyncEnabled = useIsBcfSyncEnabled()
+const route = useRoute()
+// Back from signing in at a BCF server: carry on in its dialog.
+const bcfServerOpen = ref(!!route.query.bcfSync)
 
 const showVisibilityOptions = ref(false)
 const settingsIcon = resolveComponent('IconViewerSettings') as ConcreteComponent
@@ -156,7 +162,17 @@ const actionsItems = computed<LayoutMenuItem[][]>(() => [
       id: ActionTypes.ExportBcf30,
       disabled: bcfBusy.value || commentThreads.value.length === 0
     }
-  ]
+  ],
+  ...(isBcfSyncEnabled.value
+    ? [
+        [
+          {
+            title: 'BCF server…',
+            id: ActionTypes.BcfServer
+          }
+        ]
+      ]
+    : [])
 ])
 
 const onBcfFileChosen = async (event: Event) => {
@@ -178,6 +194,9 @@ const onActionChosen = (params: { item: LayoutMenuItem; event: MouseEvent }) => 
       break
     case ActionTypes.ExportBcf30:
       void exportBcf('3.0')
+      break
+    case ActionTypes.BcfServer:
+      bcfServerOpen.value = true
       break
     case ActionTypes.HideBubbles:
       hideBubbles.value = !hideBubbles.value

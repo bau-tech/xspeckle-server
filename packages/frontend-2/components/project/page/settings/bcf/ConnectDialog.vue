@@ -7,7 +7,11 @@
   >
     <template #header>Connect a BCF server</template>
     <form class="flex flex-col gap-4" @submit="onSubmit">
+      <p v-if="modelId" class="text-body-xs text-foreground">
+        Model <span class="font-medium">{{ model?.name || modelId }}</span>
+      </p>
       <FormSelectBase
+        v-else
         v-model="model"
         name="bcfModel"
         label="Model"
@@ -154,6 +158,10 @@ const props = defineProps<{
   models: Array<{ id: string; name: string }>
   servers: BcfServerChoice[]
   callbackUrl: string
+  /** Connect this model (no choice). */
+  modelId?: string
+  /** Page to come back to after signing in at the BCF server. */
+  returnTo?: string
 }>()
 
 const isOpen = defineModel<boolean>('open', { required: true })
@@ -213,7 +221,8 @@ const onSubmit = handleSubmit(async () => {
       name: name.value.trim() || (isOther.value ? undefined : server.value!.name),
       direction: direction.value.id,
       clientId: clientId.value.trim() || undefined,
-      clientSecret: clientSecret.value || undefined
+      clientSecret: clientSecret.value || undefined,
+      returnTo: props.returnTo
     })
     window.location.href = authorizeUrl
   } catch (e) {
@@ -229,7 +238,11 @@ const onSubmit = handleSubmit(async () => {
 watch(isOpen, (open, wasOpen) => {
   if (!open || wasOpen) return
   fullyResetForm(resetForm)
-  model.value = props.models.length === 1 ? props.models[0] : undefined
+  model.value = props.modelId
+    ? props.models.find((m) => m.id === props.modelId) || { id: props.modelId, name: '' }
+    : props.models.length === 1
+    ? props.models[0]
+    : undefined
   server.value = serverItems.value[0]
   serverUrl.value = ''
   direction.value = directionItems[0]

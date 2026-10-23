@@ -245,6 +245,13 @@ const {
 
 const { onPanelButtonClick } = useViewerPanelsUtilities()
 
+// Back from signing in at a BCF server: reopen the BCF panel, whose
+// "BCF server…" dialog carries on with the connection.
+const bcfReturnRoute = useRoute()
+onMounted(() => {
+  if (bcfReturnRoute.query.bcfSync) activePanel.value = 'discussions'
+})
+
 const width = ref(264)
 const panelExtensionWidth = ref(isMobile.value ? 200 : isLargerThanLg.value ? 300 : 256)
 const scrollableControlsContainer = ref(null as Nullable<HTMLDivElement>)

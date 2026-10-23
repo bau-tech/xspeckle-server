@@ -18,6 +18,7 @@ export const BcfServerConnections = buildTableHelper('bcf_server_connections', [
   'oauthState',
   'oauthVerifier',
   'oauthStartedAt',
+  'oauthReturnTo',
   'remoteProjectId',
   'remoteProjectName',
   'direction',
@@ -44,6 +45,7 @@ export type NewBcfServerConnection = Pick<
   | 'clientSecretEnc'
   | 'oauthState'
   | 'oauthVerifier'
+  | 'oauthReturnTo'
   | 'direction'
 > & { oauthStartedAt: Date }
 

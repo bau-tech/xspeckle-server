@@ -25,6 +25,8 @@ export interface BcfServerConnectionRecord {
   oauthState: Nullable<string>
   oauthVerifier: Nullable<string>
   oauthStartedAt: Nullable<Date>
+  /** Frontend path to return to after signing in. */
+  oauthReturnTo: Nullable<string>
   remoteProjectId: Nullable<string>
   remoteProjectName: Nullable<string>
   direction: BcfSyncDirection
@@ -46,5 +48,6 @@ export type BcfServerConnectionPublic = Omit<
   | 'refreshTokenEnc'
   | 'oauthState'
   | 'oauthVerifier'
+  | 'oauthReturnTo'
   | 'server'
 > & { serverUrl: string }

@@ -2,7 +2,9 @@
  * Managing connections to external BCF servers.
  *
  *   POST   /api/v1/bcf-sync/projects/:projectId/connections
- *          { modelId, serverUrl, name?, direction?, clientId?, clientSecret? }
+ *          { modelId, serverUrl, name?, direction?, clientId?, clientSecret?, returnTo? }
+ *          (returnTo: the frontend path to come back to after signing in;
+ *          default the project's BCF servers settings)
  *          -> { connection, authorizeUrl }  (send the user to authorizeUrl)
  *   GET    /api/v1/bcf-sync/projects/:projectId/connections
  *   GET    /api/v1/bcf-sync/projects/:projectId/models     (for the model picker)
@@ -19,7 +21,7 @@
  *          { remoteProjectId, direction? }
  *   POST   /api/v1/bcf-sync/connections/:id/sync?dryRun=true|false[&allowMassDelete=true]
  *          sync now; a dry run (default) reports what would change, writing nothing
- *   POST   /api/v1/bcf-sync/connections/:id/reauthorize -> { authorizeUrl }
+ *   POST   /api/v1/bcf-sync/connections/:id/reauthorize { returnTo? } -> { authorizeUrl }
  *          sign in again, keeping the connection
  *   POST   /api/v1/bcf-sync/connections/:id/activate   start scheduled syncing
  *   POST   /api/v1/bcf-sync/connections/:id/disable    stop it
@@ -58,6 +60,7 @@ import {
   completeBcfAuthorizationFactory,
   makeBcfClientFactory,
   reauthorizeBcfConnectionFactory,
+  safeReturnPath,
   selectBcfRemoteProjectFactory,
   startBcfConnectionFactory,
   toPublicConnection
@@ -148,7 +151,8 @@ export const getBcfSyncRouter = (): Router => {
         name: str(req.body?.name),
         direction,
         clientId: str(req.body?.clientId)?.trim() || undefined,
-        clientSecret: str(req.body?.clientSecret) || undefined
+        clientSecret: str(req.body?.clientSecret) || undefined,
+        returnTo: str(req.body?.returnTo)
       })
       res.status(201).json(result)
     } catch (e) {
@@ -218,12 +222,17 @@ export const getBcfSyncRouter = (): Router => {
   router.get('/api/v1/bcf-sync/callback', async (req, res) => {
     const state = str(req.query.state)
     const code = str(req.query.code)
-    const front = (path: string, params: Record<string, string>) =>
-      res.redirect(`${getFrontendOrigin()}${path}?${new URLSearchParams(params)}`)
+    const front = (path: string, params: Record<string, string>) => {
+      // path is a same-site path (safeReturnPath), so the origin stays ours
+      const target = new URL(path, getFrontendOrigin())
+      for (const [k, v] of Object.entries(params)) target.searchParams.set(k, v)
+      return res.redirect(target.toString())
+    }
     try {
       if (!state) throw new BadRequestError('Missing state')
       const pending = await getBcfConnectionByStateFactory({ db })(state)
       if (!pending) throw new BadRequestError('Unknown or already used sign-in request')
+      const back = safeReturnPath(pending.oauthReturnTo) || settingsPath(pending.projectId)
       if (str(req.query.error) || !code) {
         // A new connection goes; one that was signing in again stays as it was.
         if (!pending.accessTokenEnc) await deleteBcfConnectionFactory({ db })(pending.id)
@@ -231,9 +240,10 @@ export const getBcfSyncRouter = (): Router => {
           await updateConnection(pending.id, {
             oauthState: null,
             oauthVerifier: null,
-            oauthStartedAt: null
+            oauthStartedAt: null,
+            oauthReturnTo: null
           })
-        return front(settingsPath(pending.projectId), {
+        return front(back, {
           bcfSync: 'denied',
           reason: str(req.query.error_description) || str(req.query.error) || 'no code'
         })
@@ -243,7 +253,7 @@ export const getBcfSyncRouter = (): Router => {
         updateConnection,
         serverOrigin: getServerOrigin()
       })({ state, code })
-      return front(settingsPath(connection.projectId), {
+      return front(back, {
         bcfSync: 'authorized',
         connection: connection.id
       })
@@ -301,7 +311,7 @@ export const getBcfSyncRouter = (): Router => {
       const authorizeUrl = await reauthorizeBcfConnectionFactory({
         updateConnection,
         serverOrigin: getServerOrigin()
-      })(connection)
+      })(connection, str(req.body?.returnTo))
       res.json({ authorizeUrl })
     } catch (e) {
       sendError(req, res, e)

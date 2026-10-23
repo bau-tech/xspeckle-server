@@ -166,6 +166,7 @@ export function useBcfServerConnections(projectId: MaybeRefOrGetter<string>) {
       direction: BcfSyncDirection
       clientId?: string
       clientSecret?: string
+      returnTo?: string
     }) =>
       call<{ connection: BcfConnection; authorizeUrl: string }>(
         'POST',
@@ -189,8 +190,10 @@ export function useBcfServerConnections(projectId: MaybeRefOrGetter<string>) {
           ...(opts.allowMassDelete ? { allowMassDelete: 'true' } : {})
         })}`
       ),
-    reauthorize: (connectionId: string) =>
-      call<{ authorizeUrl: string }>('POST', `/connections/${connectionId}/reauthorize`),
+    reauthorize: (connectionId: string, returnTo?: string) =>
+      call<{ authorizeUrl: string }>('POST', `/connections/${connectionId}/reauthorize`, {
+        returnTo
+      }),
     activate: (connectionId: string) =>
       call<BcfConnection>('POST', `/connections/${connectionId}/activate`),
     disable: (connectionId: string) =>

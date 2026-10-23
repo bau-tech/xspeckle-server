@@ -34,6 +34,16 @@ const EXPIRY_SKEW_MS = 60 * 1000
 export const bcfCallbackUrl = (serverOrigin: string) =>
   `${serverOrigin.replace(/\/+$/, '')}/api/v1/bcf-sync/callback`
 
+/**
+ * A frontend path to return to after signing in, or null: only paths on
+ * this site ("/projects/..."), never another origin ("//host", "/\host").
+ */
+export const safeReturnPath = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length > 1000) return null
+  if (!value.startsWith('/') || value.startsWith('//') || /[\\\s]/.test(value)) return null
+  return value
+}
+
 export const toPublicConnection = (
   c: BcfServerConnectionRecord
 ): BcfServerConnectionPublic => {
@@ -43,6 +53,7 @@ export const toPublicConnection = (
     refreshTokenEnc: _c,
     oauthState: _d,
     oauthVerifier: _e,
+    oauthReturnTo: _f,
     server,
     ...rest
   } = c
@@ -68,6 +79,8 @@ export const startBcfConnectionFactory =
     /** For servers without automatic client registration. */
     clientId?: string
     clientSecret?: string
+    /** Frontend path to come back to after signing in. */
+    returnTo?: string
   }) => {
     if (!(await deps.modelExists(args.projectId, args.modelId)))
       throw new NotFoundError('Model not found in this project')
@@ -99,6 +112,7 @@ export const startBcfConnectionFactory =
       oauthState: state,
       oauthVerifier: verifier,
       oauthStartedAt: new Date(),
+      oauthReturnTo: safeReturnPath(args.returnTo),
       direction: args.direction || 'two-way'
     })
 
@@ -152,6 +166,7 @@ export const completeBcfAuthorizationFactory =
       oauthState: null,
       oauthVerifier: null,
       oauthStartedAt: null,
+      oauthReturnTo: null,
       // A connection that already syncs a project (signing in again) resumes.
       status: connection.remoteProjectId ? 'active' : 'authorized',
       lastError: null
@@ -168,13 +183,14 @@ export const reauthorizeBcfConnectionFactory =
     updateConnection: ReturnType<typeof updateBcfConnectionFactory>
     serverOrigin: string
   }) =>
-  async (connection: BcfServerConnectionRecord) => {
+  async (connection: BcfServerConnectionRecord, returnTo?: string) => {
     const { verifier, challenge } = generatePkce()
     const state = generateState()
     await deps.updateConnection(connection.id, {
       oauthState: state,
       oauthVerifier: verifier,
-      oauthStartedAt: new Date()
+      oauthStartedAt: new Date(),
+      oauthReturnTo: safeReturnPath(returnTo)
     })
     return buildAuthorizeUrl({
       info: connection.server,
