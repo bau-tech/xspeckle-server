@@ -1,4 +1,5 @@
 import { ensureError } from '@speckle/shared'
+import { isEqual } from 'lodash-es'
 import type {
   BimSnippetInput,
   CreateCommentInput,
@@ -610,6 +611,18 @@ export const editTopicAndNotifyFactory =
       updatePayload.referenceLinks = input.referenceLinks
     if (input.bimSnippet !== undefined)
       updatePayload.bimSnippet = bimSnippetFromInput(input.bimSnippet)
+    // A sync client re-sends whole topics. When nothing differs, skip the write
+    // and the event: otherwise every echo bumps modifiedDate and fires a webhook
+    // that makes the other side push again.
+    const changesNothing =
+      input.relatedTopicIds === undefined &&
+      input.relatedTopicGuids === undefined &&
+      input.documentReferences === undefined &&
+      Object.entries(updatePayload).every(([key, value]) =>
+        isEqual(value, topic[key as keyof CommentRecord])
+      )
+    if (changesNothing) return topic
+
     // BCF modified_author/modified_date: the acting user and now, unless a
     // sync supplied the source's own values.
     updatePayload.modifiedAuthor =
@@ -617,6 +630,7 @@ export const editTopicAndNotifyFactory =
     updatePayload.modifiedDate = input.modifiedDate
       ? new Date(input.modifiedDate)
       : new Date()
+    updatePayload.updatedAt = new Date()
 
     const updatedComment = await deps.updateComment(topic.id, updatePayload)
 

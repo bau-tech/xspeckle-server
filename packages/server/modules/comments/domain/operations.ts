@@ -404,6 +404,8 @@ export type PaginatedProjectCommentsParams = {
        * all versions of any selected comments
        */
       allModelVersions: boolean | null
+      /** Only comments whose updatedAt is at or after this */
+      modifiedSince: Date | string | null
     }>
   >
 }

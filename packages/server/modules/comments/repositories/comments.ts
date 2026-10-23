@@ -610,6 +610,10 @@ const getPaginatedProjectCommentsBaseQueryFactory =
       q.whereNull(Comments.col.parentComment)
     }
 
+    if (filter?.modifiedSince) {
+      q.andWhere(Comments.col.updatedAt, '>=', new Date(filter.modifiedSince))
+    }
+
     // if we return `q` directly, it gets awaited as well
     return { baseQuery: q }
   }

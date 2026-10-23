@@ -3578,6 +3578,12 @@ export type ProjectTopicsFilter = {
    */
   loadedVersionsOnly?: InputMaybe<Scalars['Boolean']['input']>;
   /**
+   * Only request topics that changed (including replies and viewpoints added to
+   * them) at or after this time. Lets a sync client catch up after missed
+   * webhooks. Deleted topics are not returned.
+   */
+  modifiedSince?: InputMaybe<Scalars['DateTime']['input']>;
+  /**
    * Only request topics belonging to the resources identified by this
    * comma-delimited resouce string (same format that's used in the viewer URL)
    */

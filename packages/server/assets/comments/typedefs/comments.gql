@@ -554,6 +554,13 @@ input ProjectTopicsFilter {
   enabled, then only topics of loaded/referenced versions in resourceIdString will be returned.
   """
   loadedVersionsOnly: Boolean
+
+  """
+  Only request topics that changed (including replies and viewpoints added to
+  them) at or after this time. Lets a sync client catch up after missed
+  webhooks. Deleted topics are not returned.
+  """
+  modifiedSince: DateTime
 }
 
 type ResourceIdentifier {
