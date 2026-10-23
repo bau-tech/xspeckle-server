@@ -70,7 +70,7 @@ const props = withDefaults(
   }>(),
   {
     dialogMode: false,
-    title: 'Speckle login'
+    title: 'xSpeckle login'
   }
 )
 
