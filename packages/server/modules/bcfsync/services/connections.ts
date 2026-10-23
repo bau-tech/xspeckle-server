@@ -265,10 +265,23 @@ export const makeBcfClientFactory = (deps: {
     })
 }
 
+/**
+ * Picks the BCF project a connection syncs with. When the model is already
+ * connected to that project on that server (connecting again, e.g. from
+ * another page), the existing connection is kept -- it has the sync history
+ * -- and takes over this sign-in; the new one is dropped. Returns the
+ * connection that now syncs it.
+ */
 export const selectBcfRemoteProjectFactory =
   (deps: {
     updateConnection: ReturnType<typeof updateBcfConnectionFactory>
     makeClient: ReturnType<typeof makeBcfClientFactory>
+    findConnectionForTarget: (target: {
+      modelId: string
+      baseUrl: string
+      remoteProjectId: string
+    }) => Promise<BcfServerConnectionRecord | undefined>
+    deleteConnection: (id: string) => Promise<unknown>
   }) =>
   async (args: {
     connection: BcfServerConnectionRecord
@@ -285,6 +298,26 @@ export const selectBcfRemoteProjectFactory =
       if (e instanceof BcfServerError && (e.status === 404 || e.status === 403))
         throw new BadRequestError('That BCF project does not exist or is not accessible')
       throw e
+    }
+    const c = args.connection
+    const existing = await deps.findConnectionForTarget({
+      modelId: c.modelId,
+      baseUrl: c.baseUrl,
+      remoteProjectId: args.remoteProjectId
+    })
+    if (existing && existing.id !== c.id) {
+      const merged = await deps.updateConnection(existing.id, {
+        clientId: c.clientId,
+        clientSecretEnc: c.clientSecretEnc,
+        accessTokenEnc: c.accessTokenEnc,
+        refreshTokenEnc: c.refreshTokenEnc,
+        accessTokenExpiresAt: c.accessTokenExpiresAt,
+        // a sign-in that had expired works again
+        status: existing.status === 'error' ? 'active' : existing.status,
+        lastError: null
+      })
+      await deps.deleteConnection(c.id)
+      return merged!
     }
     return (await deps.updateConnection(args.connection.id, {
       remoteProjectId: args.remoteProjectId,

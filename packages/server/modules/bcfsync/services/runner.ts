@@ -94,7 +94,10 @@ export interface BcfSyncReport {
   dryRun: boolean
   counts: Record<string, number>
   conflicts: number
-  /** Remote topics left alone because their guid is used elsewhere here. */
+  /**
+   * Items left alone: remote topics whose guid is used elsewhere here, and
+   * items the BCF server already has in another of its projects.
+   */
   skipped: Array<{ guid: string; title: string; reason: string }>
   operations: Array<SyncOp & { title: string }>
   /** Values the BCF server does not allow, and what was sent instead. */
@@ -357,6 +360,12 @@ export const runBcfSync = async (
       report.applied = result.applied
       report.failed = result.failed
       report.warnings = warnings
+      for (const s of result.skipped)
+        report.skipped.push({
+          guid: s.guid,
+          title: titles.get(s.guid) || (s.kind === 'topic' ? '' : `(${s.kind})`),
+          reason: s.reason
+        })
 
       await updateConnection(connection.id, {
         lastSyncAt: new Date(),
@@ -367,7 +376,7 @@ export const runBcfSync = async (
           at: new Date().toISOString(),
           counts: report.counts,
           conflicts: report.conflicts,
-          skipped: skipped.length,
+          skipped: report.skipped.length,
           applied: result.applied,
           failed: result.failed.slice(0, 20),
           warnings: warnings.slice(0, 20)

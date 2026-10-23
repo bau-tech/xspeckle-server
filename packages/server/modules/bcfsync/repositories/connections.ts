@@ -88,6 +88,12 @@ export const deleteBcfConnectionFactory =
   async (id: string): Promise<boolean> =>
     (await tbl(deps.db).where({ id }).delete()) > 0
 
+/** The connection of a model to a project on a BCF server, if any. */
+export const getBcfConnectionForTargetFactory =
+  (deps: { db: Knex }) =>
+  async (target: { modelId: string; baseUrl: string; remoteProjectId: string }) =>
+    await tbl(deps.db).where(target).first()
+
 /** A project's syncing connections (status active). */
 export const getProjectActiveBcfConnectionsFactory =
   (deps: { db: Knex }) =>

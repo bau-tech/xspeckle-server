@@ -8,7 +8,12 @@ import {
   type SyncLink
 } from '@/modules/bcfsync/domain/sync'
 import { isMassDelete, planSync, type PlanOptions } from '@/modules/bcfsync/services/planner'
-import { executeSync, type LocalWriter, type RemoteWriter } from '@/modules/bcfsync/services/engine'
+import {
+  executeSync,
+  SyncSkip,
+  type LocalWriter,
+  type RemoteWriter
+} from '@/modules/bcfsync/services/engine'
 
 const vpData = () => ({
   lines: [],
@@ -338,5 +343,35 @@ describe('BCF sync engine', () => {
       .map((l) => ({ kind: 'topic' as const, action: 'delete-local' as const, guid: l.guid, topicGuid: null }))
     expect(isMassDelete(ops, links)).to.equal(true)
     expect(isMassDelete(ops.slice(0, 5), links)).to.equal(false)
+  })
+})
+
+describe('BCF sync engine, items the server has elsewhere', () => {
+  it('reports them as skipped, not failed, and leaves their children alone', async () => {
+    const local: SideTopic = { ...topic(g(1), 'elsewhere'), id: 't1', comments: [{ ...comment(g(2), 'c'), id: 'c1' }] }
+    const created: string[] = []
+    const result = await executeSync({
+      ops: planSync({ local: [local], remote: [], links: [], options: { allowPull: true, allowPush: true } }),
+      local: [local],
+      remote: [],
+      localWriter: {} as LocalWriter,
+      remoteWriter: {
+        createTopic: async () => {
+          throw new SyncSkip('the BCF server already has this topic in another project')
+        },
+        createComment: async (_t: string, c: SideComment) => {
+          created.push(c.guid)
+          return { guid: c.guid, state: c.state }
+        }
+      } as unknown as RemoteWriter,
+      readLocal: async () => [local],
+      saveLinks: async () => undefined,
+      deleteLinks: async () => undefined
+    })
+    expect(result.failed).to.deep.equal([])
+    expect(result.skipped).to.deep.equal([
+      { kind: 'topic', guid: g(1), reason: 'the BCF server already has this topic in another project' }
+    ])
+    expect(created).to.deep.equal([])
   })
 })

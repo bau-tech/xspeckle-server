@@ -48,6 +48,7 @@ import { getProjectDbClient } from '@/modules/multiregion/utils/dbSelector'
 import { BcfServerError } from '@/modules/bcfsync/clients/bcf/discovery'
 import {
   deleteBcfConnectionFactory,
+  getBcfConnectionForTargetFactory,
   getProjectActiveBcfConnectionsFactory,
   getBcfConnectionByStateFactory,
   getBcfConnectionFactory,
@@ -280,7 +281,12 @@ export const getBcfSyncRouter = (): Router => {
       const direction = str(req.body?.direction) as BcfSyncDirection | undefined
       if (direction && !DIRECTIONS.includes(direction))
         throw new BadRequestError(`direction must be one of ${DIRECTIONS.join(', ')}`)
-      const updated = await selectBcfRemoteProjectFactory({ updateConnection, makeClient })({
+      const updated = await selectBcfRemoteProjectFactory({
+        updateConnection,
+        makeClient,
+        findConnectionForTarget: getBcfConnectionForTargetFactory({ db }),
+        deleteConnection: deleteBcfConnectionFactory({ db })
+      })({
         connection,
         remoteProjectId,
         direction

@@ -24,7 +24,8 @@ import {
   type SideViewpoint,
   type TopicState
 } from '@/modules/bcfsync/domain/sync'
-import type { LocalWriter, RemoteWriter } from '@/modules/bcfsync/services/engine'
+import { SyncSkip, type LocalWriter, type RemoteWriter } from '@/modules/bcfsync/services/engine'
+import { BcfServerError } from '@/modules/bcfsync/clients/bcf/discovery'
 import {
   fitToExtensions,
   type BcfExtensionLists
@@ -204,6 +205,17 @@ export const remoteWriterFactory = (deps: {
 }): RemoteWriter => {
   const { client, remoteProjectId: pid } = deps
   const lists = deps.extensions || {}
+
+  /** 409 on a create: the server has that guid already, in another project. */
+  const elsewhere = async <T>(what: string, fn: () => Promise<T>) => {
+    try {
+      return await fn()
+    } catch (e) {
+      if (e instanceof BcfServerError && e.status === 409)
+        throw new SyncSkip(`the BCF server already has this ${what} in another project`)
+      throw e
+    }
+  }
   const warn = deps.warn || (() => undefined)
 
   const topicBody = (t: SideTopic, current?: SideTopic) => {
@@ -258,12 +270,14 @@ export const remoteWriterFactory = (deps: {
 
   return {
     async createTopic(t) {
-      const resp = await client.createTopic(pid, {
-        guid: t.guid,
-        ...topicBody(t),
-        creation_author: t.meta.creationAuthor,
-        creation_date: t.meta.creationDate
-      })
+      const resp = await elsewhere('topic', () =>
+        client.createTopic(pid, {
+          guid: t.guid,
+          ...topicBody(t),
+          creation_author: t.meta.creationAuthor,
+          creation_date: t.meta.creationDate
+        })
+      )
       const guid = (typeof resp?.guid === 'string' ? resp.guid : t.guid).toLowerCase()
       const docRefs = await pushDocRefs(guid, t.state.documentReferences, [])
       return { guid, state: stateFrom(resp, t, docRefs) }
@@ -287,7 +301,7 @@ export const remoteWriterFactory = (deps: {
       await client.putRelatedTopics(pid, topicGuid, guids)
     },
     async createViewpoint(topicGuid, vp: SideViewpoint) {
-      const resp = await client.createViewpoint(pid, topicGuid, {
+      const resp = await elsewhere('viewpoint', () => client.createViewpoint(pid, topicGuid, {
         guid: vp.guid,
         index: vp.index,
         perspective_camera: vp.bcf.perspective_camera ?? null,
@@ -301,7 +315,7 @@ export const remoteWriterFactory = (deps: {
               snapshot_data: Buffer.from(vp.snapshot.data).toString('base64')
             }
           : null
-      })
+      }))
       return { guid: (typeof resp?.guid === 'string' ? resp.guid : vp.guid).toLowerCase() }
     },
     async deleteViewpoint(topicGuid, guid) {

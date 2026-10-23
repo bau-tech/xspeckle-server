@@ -301,6 +301,12 @@ const openProjectDialog = (c: BcfConnection) => {
 }
 
 const onProjectChosen = async (c: BcfConnection) => {
+  if (c.id !== projectDialogConnection.value?.id)
+    triggerNotification({
+      type: ToastNotificationType.Info,
+      title: 'Already connected',
+      description: `This model already syncs with ${c.remoteProjectName || 'that BCF project'}; that connection now uses your new sign-in.`
+    })
   await refresh()
   // Show what the first sync would do before anything is written.
   await runSync(c, true)

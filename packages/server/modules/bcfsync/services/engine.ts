@@ -49,7 +49,17 @@ export interface RemoteWriter {
 export interface SyncRunResult {
   applied: number
   failed: Array<{ kind: SyncItemKind; action: string; guid: string; error: string }>
+  /** Left alone for a reason that a retry does not change (see SyncSkip). */
+  skipped: Array<{ kind: SyncItemKind; guid: string; reason: string }>
 }
+
+/**
+ * Thrown by a writer for an item that cannot be written for good, e.g. a
+ * topic whose guid the BCF server already has in another of its projects.
+ * Reported as skipped, not failed; it is tried again next run all the same
+ * (cheap, and the situation can change).
+ */
+export class SyncSkip extends Error {}
 
 const isCreate = (op: SyncOp) => op.action === 'create-local' || op.action === 'create-remote'
 const isDelete = (op: SyncOp) => op.action === 'delete-local' || op.action === 'delete-remote'
@@ -66,7 +76,7 @@ export const executeSync = async (params: {
   deleteLinks: (keys: Array<{ kind: SyncItemKind; guid: string }>) => Promise<void>
 }): Promise<SyncRunResult> => {
   const { ops, localWriter: lw, remoteWriter: rw } = params
-  const result: SyncRunResult = { applied: 0, failed: [] }
+  const result: SyncRunResult = { applied: 0, failed: [], skipped: [] }
 
   const localTopics = new Map(params.local.map((t) => [t.guid, t]))
   const remoteTopics = new Map(params.remote.map((t) => [t.guid, t]))
@@ -98,12 +108,15 @@ export const executeSync = async (params: {
         remoteState: remoteState ?? undefined
       })
     } catch (e) {
-      result.failed.push({
-        kind: op.kind,
-        action: op.action,
-        guid: op.guid,
-        error: ensureError(e).message
-      })
+      if (e instanceof SyncSkip)
+        result.skipped.push({ kind: op.kind, guid: op.guid, reason: e.message })
+      else
+        result.failed.push({
+          kind: op.kind,
+          action: op.action,
+          guid: op.guid,
+          error: ensureError(e).message
+        })
       if (op.kind === 'topic' && isCreate(op)) failedTopics.add(op.guid)
     }
   }
