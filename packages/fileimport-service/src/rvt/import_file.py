@@ -724,7 +724,31 @@ def _file_info_object(
     )
 
 
-def _improve_geometry(ifc_file: Any) -> Dict[str, Dict[str, int]]:
+def _beam_directions(revit_file: rvt.RevitFile) -> Dict[int, Any]:
+    """Structural framing's plan direction by ElementId, from the Revit
+    records that store one: steel_profiles.py draws a beam rvt boxed at an
+    angle along it."""
+    elements = _safe_method(revit_file, "decoded_elements")
+    if not isinstance(elements, list):
+        return {}
+    directions: Dict[int, Any] = {}
+    for element in elements:
+        if not isinstance(element, dict) or element.get("class_name") != "StructuralFraming":
+            continue
+        fields = {
+            field.get("name"): field.get("value")
+            for field in element.get("fields") or []
+            if isinstance(field, dict)
+        }
+        x, y = fields.get("m_instance_x_axis_x"), fields.get("m_instance_x_axis_y")
+        if isinstance(element.get("id"), int) and isinstance(x, float) and isinstance(y, float):
+            directions[element["id"]] = (x, y)
+    return directions
+
+
+def _improve_geometry(
+    ifc_file: Any, beam_directions: Optional[Dict[int, Any]] = None
+) -> Dict[str, Dict[str, int]]:
     """Fills gaps in rvt's IFC before speckleifc reads it: steel members'
     real cross-sections instead of boxes (steel_profiles.py), openings cut by
     opening/void families instead of their solid blocks (void_families.py),
@@ -732,14 +756,14 @@ def _improve_geometry(ifc_file: Any) -> Dict[str, Dict[str, int]]:
     (wall_openings.py). Each step is best effort -- if one fails, its part of
     rvt's IFC stays as is."""
     results: Dict[str, Dict[str, int]] = {}
-    for key, module, function in (
-        ("steelSections", "steel_profiles", "apply_real_sections"),
-        ("voidFamilies", "void_families", "openings_from_void_families"),
-        ("addedOpenings", "wall_openings", "add_missing_openings"),
+    for key, module, function, args in (
+        ("steelSections", "steel_profiles", "apply_real_sections", (beam_directions,)),
+        ("voidFamilies", "void_families", "openings_from_void_families", ()),
+        ("addedOpenings", "wall_openings", "add_missing_openings", ()),
     ):
         try:
             step = getattr(__import__(module), function)
-            results[key] = step(ifc_file)
+            results[key] = step(ifc_file, *args)
             LOG.info("%s: %s", key, results[key])
         except Exception as ex:
             LOG.warning("%s failed, leaving rvt's geometry as is: %s", key, ex)
@@ -783,7 +807,7 @@ class _QuietProgress:
 def convert_rvt_geometry(file_path: str, revit_file: rvt.RevitFile) -> Optional[Base]:
     """
     Real geometry, when the rvt package can decode the file's elements (Revit
-    2023-2025 projects as of rvt-rs main@120e2f9ffa): rvt writes an IFC4 model
+    2023-2025 projects as of rvt-rs main@b6086d41b9): rvt writes an IFC4 model
     with typed elements and their bodies, which Speckle's own IFC importer
     (speckleifc, also used for .ifc uploads) turns into Speckle objects.
 
@@ -810,7 +834,7 @@ def convert_rvt_geometry(file_path: str, revit_file: rvt.RevitFile) -> Optional[
             ifc_out.write(ifc_step)
         del ifc_step
         ifc_file = open_ifc(ifc_path)
-        improvements = _improve_geometry(ifc_file)
+        improvements = _improve_geometry(ifc_file, _beam_directions(revit_file))
         root = ImportJob(ifc_file, _QuietProgress()).convert()
     finally:
         os.unlink(ifc_path)

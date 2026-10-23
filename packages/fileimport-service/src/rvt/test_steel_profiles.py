@@ -1,3 +1,4 @@
+import math
 import unittest
 
 import ifcopenshell
@@ -18,6 +19,10 @@ class ParseDesignationTests(unittest.TestCase):
         self.assertAlmostEqual(w.depth, 18.1 * 0.0254, places=4)
         self.assertAlmostEqual(w.width, 7.53 * 0.0254, places=4)
         self.assertEqual(self.parse("C Channels", "C15X50").kind, "U")
+        # A decimal weight, which the table keys as C8X11_5
+        c = self.parse("C Shapes", "C8X11.5")
+        self.assertEqual((c.kind, c.name), ("U", "C8X11.5"))
+        self.assertAlmostEqual(c.depth, 8 * 0.0254, places=4)
         self.assertEqual(self.parse("Structural Tees", "WT22X204").kind, "T")
         self.assertEqual(self.parse("Pipe", "Pipe4STD").kind, "CHS")
 
@@ -134,6 +139,28 @@ class ApplyRealSectionsTests(unittest.TestCase):
         lo, hi = self.extents(joist)
         self.assertAlmostEqual(hi[1] - lo[1], 6.0, places=3)
         self.assertAlmostEqual(hi[2], 0.406, places=3)
+
+
+    def test_a_box_around_a_beam_at_an_angle_becomes_the_beam(self):
+        # A W18x86 4.65 m long, turned 24.5 degrees: rvt boxes its plan extents
+        width, length = 0.28194, 4.65
+        c, s = math.cos(math.radians(24.5)), math.sin(math.radians(24.5))
+        box = (length * c + width * s, length * s + width * c)
+        beam = self.member("IfcBeam", "W Shapes:W18x86:5", box[0], box[1], 0.467)
+        unknown = self.member("IfcBeam", "W Shapes:W18x86:6", box[0], box[1], 0.467)
+
+        stats = apply_real_sections(self.f, {5: (c, -s)})
+
+        self.assertEqual(stats, {"I skewed beam": 1, "skipped: section doesn't fit box": 1})
+        solid = beam.Representation.Representations[0].Items[0]
+        self.assertTrue(solid.SweptArea.is_a("IfcIShapeProfileDef"))
+        self.assertAlmostEqual(solid.Depth, length, places=3)
+        lo, hi = self.extents(beam)
+        # Its plan extents are the box rvt drew, its top the box top
+        self.assertAlmostEqual(hi[0] - lo[0], box[0], places=3)
+        self.assertAlmostEqual(hi[1] - lo[1], box[1], places=3)
+        self.assertAlmostEqual(hi[2], 0.467, places=4)
+        self.assertTrue(unknown.Representation.Representations[0].Items[0].SweptArea.is_a("IfcRectangleProfileDef"))
 
 
 if __name__ == "__main__":

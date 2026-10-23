@@ -8,43 +8,11 @@ like a generic model and exported as an IfcBuildingElementProxy named
 `WallOpening-<ElementId>` with its record box, for a consumer to cut from
 the wall it crosses (the file importer's void_families.py does).
 
---- a/src/partition_element_records.rs
-+++ b/src/partition_element_records.rs
-@@ -222,6 +222,11 @@
- pub const OST_STRUCTURAL_FOUNDATION: i64 = -2_001_300;
- /// Autodesk `BuiltInCategory.OST_GenericModel`.
- pub const OST_GENERIC_MODEL: i64 = -2_000_151;
-+/// Autodesk `BuiltInCategory.OST_SWallRectOpening` -- a rectangular wall
-+/// opening placed with Revit's Opening tool. Its record box is the hole it
-+/// cuts (wall thickness x width x height); it is exported as a proxy named
-+/// `WallOpening` for a consumer to cut from the wall it crosses.
-+pub const OST_SWALL_RECT_OPENING: i64 = -2_000_997;
- 
- // RE-37: fixtures, site and circulation categories. Scored like RE-33's,
- // against the `Tag` sets of Revit's own exports, with the ids of RE-35.
-@@ -305,7 +310,8 @@
- /// RE-39 adds stairs with their runs, landings and stringers, and roofs.
- /// RE-40 adds slab edges, once elements in non-primary design options are
- /// left out: all 59 exported on Snowdon Towers are Revit's.
--pub const PRODUCT_RECORD_CATEGORIES: [(i64, &str); 38] = [
-+pub const PRODUCT_RECORD_CATEGORIES: [(i64, &str); 39] = [
-+    (OST_SWALL_RECT_OPENING, "WallOpening"),
-     (OST_FURNITURE, "Furniture"),
-     (OST_CASEWORK, "Casework"),
-     (OST_PLUMBING_FIXTURES, "PlumbingFixture"),
-@@ -1237,7 +1243,8 @@
- /// The categories the exporter recovers instances of, with the class name
- /// each is decoded as: the architectural core plus
- /// [`PRODUCT_RECORD_CATEGORIES`].
--pub const RECOVERED_CATEGORIES: [(i64, &str); 45] = [
-+pub const RECOVERED_CATEGORIES: [(i64, &str); 46] = [
-+    (OST_SWALL_RECT_OPENING, "WallOpening"),
-     (OST_WALLS, "Wall"),
-     (OST_DOORS, "Door"),
-     (OST_WINDOWS, "Window"),
+diff --git a/src/ifc/category_map.rs b/src/ifc/category_map.rs
+index 863c1c8..797beeb 100644
 --- a/src/ifc/category_map.rs
 +++ b/src/ifc/category_map.rs
-@@ -359,6 +359,13 @@
+@@ -359,6 +359,13 @@ pub const MAPPINGS: &[Mapping] = &[
          ifc_type: "IFCBUILDINGELEMENTPROXY",
          predefined_type: None,
      },
@@ -58,3 +26,39 @@ the wall it crosses (the file importer's void_families.py does).
      // RE-37: the entities Revit's own IFC4 export writes for these
      // categories on Snowdon Towers (air terminals from the IFC4 subtype of
      // the IFC2x3 `IfcFlowTerminal` Revit writes on RE1 Mechanical).
+diff --git a/src/partition_element_records.rs b/src/partition_element_records.rs
+index 3a47982..2bdce3c 100644
+--- a/src/partition_element_records.rs
++++ b/src/partition_element_records.rs
+@@ -304,6 +304,11 @@ pub const OST_STRUCTURAL_COLUMNS: i64 = -2_001_330;
+ pub const OST_STRUCTURAL_FOUNDATION: i64 = -2_001_300;
+ /// Autodesk `BuiltInCategory.OST_GenericModel`.
+ pub const OST_GENERIC_MODEL: i64 = -2_000_151;
++/// Autodesk `BuiltInCategory.OST_SWallRectOpening` -- a rectangular wall
++/// opening placed with Revit's Opening tool. Its record box is the hole it
++/// cuts (wall thickness x width x height); it is exported as a proxy named
++/// `WallOpening` for a consumer to cut from the wall it crosses.
++pub const OST_SWALL_RECT_OPENING: i64 = -2_000_997;
+ 
+ // RE-37: fixtures, site and circulation categories. Scored like RE-33's,
+ // against the `Tag` sets of Revit's own exports, with the ids of RE-35.
+@@ -387,7 +392,8 @@ pub const OST_EDGE_SLAB: i64 = -2_001_392;
+ /// RE-39 adds stairs with their runs, landings and stringers, and roofs.
+ /// RE-40 adds slab edges, once elements in non-primary design options are
+ /// left out: all 59 exported on Snowdon Towers are Revit's.
+-pub const PRODUCT_RECORD_CATEGORIES: [(i64, &str); 39] = [
++pub const PRODUCT_RECORD_CATEGORIES: [(i64, &str); 40] = [
++    (OST_SWALL_RECT_OPENING, "WallOpening"),
+     (OST_FURNITURE, "Furniture"),
+     (OST_CASEWORK, "Casework"),
+     (OST_PLUMBING_FIXTURES, "PlumbingFixture"),
+@@ -1362,7 +1368,8 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+ /// The categories the exporter recovers instances of, with the class name
+ /// each is decoded as: the architectural core plus
+ /// [`PRODUCT_RECORD_CATEGORIES`].
+-pub const RECOVERED_CATEGORIES: [(i64, &str); 46] = [
++pub const RECOVERED_CATEGORIES: [(i64, &str); 47] = [
++    (OST_SWALL_RECT_OPENING, "WallOpening"),
+     (OST_WALLS, "Wall"),
+     (OST_DOORS, "Door"),
+     (OST_WINDOWS, "Window"),

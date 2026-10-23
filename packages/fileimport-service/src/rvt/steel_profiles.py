@@ -26,6 +26,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import ifcopenshell
+import ifcopenshell.util.placement
+import numpy as np
 
 INCH = 0.0254
 MM = 0.001
@@ -108,7 +110,8 @@ def _parse(text: str, family: str) -> Optional[Section]:
     m = re.search(rf"\b(W|HP|M|S|C|MC|WT|MT|ST)\s*{_NUM}\s*X\s*{_NUM}\b", name)
     if m:
         key = f"{m[1]}{_trim(m[2])}X{_trim(m[3])}"
-        section = _catalog_section(key, key)
+        # The table writes a decimal weight with an underscore: C8X11_5
+        section = _catalog_section(key.replace(".", "_"), key)
         if section:
             return section
 
@@ -289,6 +292,44 @@ def _plan_box(item) -> Optional[_PlanBox]:
     return _PlanBox(centre, axis, length, width, item.Depth)
 
 
+def _skewed_box(section: Section, element, item, direction: Tuple[float, float]) -> Optional[_PlanBox]:
+    """rvt's box for a beam it couldn't draw along its line is the beam's
+    plan bounding box, square to the axes even when the beam runs at an
+    angle. Given the beam's plan direction from its Revit record, the beam
+    that box bounds: centred in it, as long as leaves the section's width to
+    fill the rest of it. None if the box doesn't bound such a beam."""
+    box = _plan_box(item)
+    if box is None:
+        return None
+    # The record's direction is in world coordinates, the box in its element's
+    rotation = ifcopenshell.util.placement.get_local_placement(element.ObjectPlacement)[:3, :3]
+    x, y, _ = rotation.T @ np.array([direction[0], direction[1], 0.0])
+    norm = math.hypot(x, y)
+    if norm < 1e-9:
+        return None
+    axis = (x / norm, y / norm)
+    profile = item.SweptArea
+    ppos = profile.Position
+    ref = ppos.RefDirection.DirectionRatios if ppos is not None and ppos.RefDirection else (1.0, 0.0)
+    norm = math.hypot(ref[0], ref[1])
+    ref = (ref[0] / norm, ref[1] / norm)
+    # How far the beam turns from the box's X and Y sides
+    c = abs(axis[0] * ref[0] + axis[1] * ref[1])
+    s = abs(axis[1] * ref[0] - axis[0] * ref[1])
+    width = section.width
+    if c >= s:
+        length = (profile.XDim - width * s) / c
+        side, expected = profile.YDim, length * s + width * c
+    else:
+        length = (profile.YDim - width * c) / s
+        side, expected = profile.XDim, length * c + width * s
+    if length <= 2 * width or not _close(side, expected):
+        return None
+    if not 0.6 * box.height <= section.depth <= 1.6 * box.height:
+        return None
+    return _PlanBox(box.centre, axis, length, width, box.height)
+
+
 def _beam_solid(f: ifcopenshell.file, section: Section, turned: bool, box: _PlanBox):
     """The section extruded along the beam, top of steel at the box top (the
     beam's location line is its top of steel)."""
@@ -377,9 +418,20 @@ def _body_item(element):
     return None, None
 
 
-def apply_real_sections(f: ifcopenshell.file) -> Dict[str, int]:
+def _element_id(element) -> Optional[int]:
+    # rvt names elements Family:Type:ElementId
+    last = (element.Name or "").rsplit(":", 1)[-1]
+    return int(last) if last.isdigit() else None
+
+
+def apply_real_sections(
+    f: ifcopenshell.file, directions: Optional[Dict[int, Tuple[float, float]]] = None
+) -> Dict[str, int]:
     """Replaces rvt's boxes with real steel sections in place; returns how
-    many members got which outcome."""
+    many members got which outcome. `directions` holds beams' plan
+    directions by ElementId, from their Revit records: with one, a box rvt
+    drew around a beam at an angle becomes that beam."""
+    directions = directions or {}
     stats: Dict[str, int] = {}
 
     def count(outcome: str) -> None:
@@ -438,7 +490,13 @@ def apply_real_sections(f: ifcopenshell.file) -> Dict[str, int]:
             continue
         turned = _fits_across(section, box.width, box.height)
         if turned is None:
-            count("skipped: section doesn't fit box")
+            direction = directions.get(_element_id(element))
+            skewed = _skewed_box(section, element, item, direction) if direction else None
+            if skewed is None:
+                count("skipped: section doesn't fit box")
+                continue
+            shape.Items = [_beam_solid(f, section, False, skewed)]
+            count(f"{section.kind} skewed beam")
             continue
         shape.Items = [_beam_solid(f, section, turned, box)]
         count(f"{section.kind} beam")

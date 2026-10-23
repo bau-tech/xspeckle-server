@@ -1,14 +1,11 @@
-Floor and roof outlines on Revit 2025 (sketch curve lists, span-direction
-lines, arc box tolerance).
+Floor and roof outlines on Revit 2025 (span-direction lines, arc box
+tolerance).
 
 On Revit 2025 every floor came out as its record's bounding box, so floor
 contours and sketch holes were lost (two user models and Autodesk's
-rst_advanced 2025 sample among them). Three causes, each checked on those
+rst_advanced 2025 sample among them). Two causes, each checked on those
 files:
 
-- scan_sketch_curve_lists read the Sketch's own curve list only on 2024.
-  The 2025 layout is the same (owner at +77 past the element-data header,
-  which partition_names already knows for 2025), so 2025 is listed too.
 - A floor's span-direction arrow is one of its sketch lines and 2025 lists
   it with the boundary (a line straight across the floor, both ends free),
   so the loop solve rejected the whole floor. Curves with an end no other
@@ -17,26 +14,14 @@ files:
   Revit's record box comes from a coarse tessellation of the arc and stops
   short of it (0.0046 ft on a 6.2 ft radius). Arc outlines get 0.01 ft.
 
-Drop this patch once upstream reads 2025 sketches itself.
+The Revit 2025 sketch curve list read is upstream now. Drop this patch once
+upstream handles the rest itself.
 
-diff --git a/src/element_record_plan_profiles.rs b/src/element_record_plan_profiles.rs
-index 644d615..0cc460f 100644
---- a/src/element_record_plan_profiles.rs
-+++ b/src/element_record_plan_profiles.rs
-@@ -894,7 +894,7 @@ pub fn scan_sketch_curve_lists(
-     revit_version: u32,
-     sketch_lines: &std::collections::BTreeSet<u32>,
- ) -> BTreeMap<u32, Vec<u32>> {
--    if revit_version != 2024 || sketch_lines.is_empty() {
-+    if !matches!(revit_version, 2024 | 2025) || sketch_lines.is_empty() {
-         return BTreeMap::new();
-     }
-     let Some(header) = crate::partition_names::element_data_header(revit_version) else {
 diff --git a/src/partition_schema_mvp.rs b/src/partition_schema_mvp.rs
-index ff43cd2..bd8ffe5 100644
+index ad1efe6..2b2954f 100644
 --- a/src/partition_schema_mvp.rs
 +++ b/src/partition_schema_mvp.rs
-@@ -5434,6 +5434,10 @@ pub fn slabs_from_partition_category_records(
+@@ -7027,6 +7027,10 @@ pub fn slabs_from_partition_category_records(
  /// its element's record box (RE-96), feet.
  pub const SKETCH_BOX_TOLERANCE_FEET: f64 = 1e-3;
  
@@ -47,7 +32,7 @@ index ff43cd2..bd8ffe5 100644
  /// Sketched plan profiles of the elements in `owners` (their plan record
  /// boxes, `[min x, min y, max x, max y]`), from their Sketch's curve list
  /// where it has one (RE-97) or else the lines naming them, and their
-@@ -5499,16 +5503,19 @@ fn sketch_plan_profiles(
+@@ -7101,16 +7105,19 @@ fn sketch_plan_profiles(
          })
          .map(|(owner, _)| *owner)
          .collect();
@@ -69,7 +54,7 @@ index ff43cd2..bd8ffe5 100644
      let sketch_lines = remapped.as_slice();
      let mut profiles = erpp::plan_profiles_from_sketch_line_records(sketch_lines);
      profiles.retain(|owner, profile| !relisted.contains(owner) || spans_box(*owner, profile));
-@@ -5599,6 +5606,11 @@ fn sketch_plan_profiles(
+@@ -7201,6 +7208,11 @@ fn sketch_plan_profiles(
              })
              .collect::<Option<Vec<(u32, Vec<[f64; 4]>, bool)>>>()
              .map(|curves| {
@@ -81,7 +66,7 @@ index ff43cd2..bd8ffe5 100644
                  let has_arc = curves.iter().any(|(_, _, arc)| *arc);
                  // RE-151: each line's first chord is an edge of its loop.
                  let points = curves
-@@ -5621,7 +5633,11 @@ fn sketch_plan_profiles(
+@@ -7223,7 +7235,11 @@ fn sketch_plan_profiles(
          };
          // RE-96: an outline with an arc spans the element's own record box,
          // or the sketch holds curves that are not the element's edge.
@@ -94,7 +79,7 @@ index ff43cd2..bd8ffe5 100644
              erpp::tag_voids(&mut profile, &points);
              profile.segment_ids = segments.keys().copied().collect();
              profiles.insert(owner, profile);
-@@ -5630,6 +5646,49 @@ fn sketch_plan_profiles(
+@@ -7232,6 +7248,49 @@ fn sketch_plan_profiles(
      profiles
  }
  

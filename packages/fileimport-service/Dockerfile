@@ -36,13 +36,13 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
       | sh -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN} \
     && pip install --break-system-packages --no-cache-dir maturin==${MATURIN_VERSION}
 
-# rvt-rs main as of 2026-10-05 (past v0.4.0: Revit 2023 projects, curved and
-# tapered walls, stairs, ceilings, shafts, steel I sections, pipes, rooms,
-# materials and property sets) -- verified against the magnetar, IFC-ECS RE1
-# and Autodesk rac/rst basic sample projects of 2023-2025. Was 3503a604ea
-# (2026-10-03).
+# rvt-rs main as of 2026-10-21 (after v0.6.1, the latest release: gable, hip
+# and slope-arrow roofs as their planes and Revit 2025 roof slopes, MEP
+# ports placed at their connector ends, masses written as their Export to
+# IFC As entity, experimental releases flagged in the diagnostics). Was
+# 6209fbf4d2 (2026-10-20).
 ARG RVT_RS_GIT_URL=https://github.com/DrunkOnJava/rvt-rs.git
-ARG RVT_RS_REVISION=120e2f9ffa8422ba437102c8d300b7e902cdde80
+ARG RVT_RS_REVISION=b6086d41b9758fd9b92f42f0a47b8345b9c58056
 RUN git clone --filter=blob:none ${RVT_RS_GIT_URL} . \
     && git checkout ${RVT_RS_REVISION}
 # Our own small patches on top of that commit (see each patch for why);
