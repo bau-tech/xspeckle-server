@@ -27,6 +27,7 @@ export const BcfServerConnections = buildTableHelper('bcf_server_connections', [
   'lastSyncAt',
   'pullCursor',
   'lastSyncResult',
+  'remoteExtensions',
   'createdAt',
   'updatedAt'
 ])
@@ -93,6 +94,12 @@ export const getBcfConnectionForTargetFactory =
   (deps: { db: Knex }) =>
   async (target: { modelId: string; baseUrl: string; remoteProjectId: string }) =>
     await tbl(deps.db).where(target).first()
+
+/** A project's connections that have a BCF project chosen. */
+export const getProjectBcfConnectionsWithProjectFactory =
+  (deps: { db: Knex }) =>
+  async (projectId: string): Promise<BcfServerConnectionRecord[]> =>
+    await tbl(deps.db).where({ projectId }).whereNotNull('remoteProjectId')
 
 /** A project's syncing connections (status active). */
 export const getProjectActiveBcfConnectionsFactory =

@@ -1,5 +1,9 @@
 import { expect } from 'chai'
-import { extensionLists, fitToExtensions } from '@/modules/bcfsync/services/extensions'
+import {
+  extensionLists,
+  fitToExtensions,
+  mergeExtensionLists
+} from '@/modules/bcfsync/services/extensions'
 import { meta, topicState, type SideTopic } from '@/modules/bcfsync/domain/sync'
 
 const topic = (over: Partial<Parameters<typeof topicState>[0]> = {}): SideTopic => ({
@@ -26,6 +30,21 @@ const topic = (over: Partial<Parameters<typeof topicState>[0]> = {}): SideTopic 
 })
 
 describe('BCF sync extensions', () => {
+  it("merges several connections' lists, each value once", () => {
+    expect(
+      mergeExtensionLists([
+        { users: ['a@x.y', 'b@x.y'], topic_status: ['Open'] },
+        null,
+        { users: ['b@x.y', 'c@x.y'], priority: ['High'] }
+      ])
+    ).to.deep.equal({
+      topic_status: ['Open'],
+      priority: ['High'],
+      users: ['a@x.y', 'b@x.y', 'c@x.y']
+    })
+    expect(mergeExtensionLists([])).to.deep.equal({})
+  })
+
   it('keeps only non-empty string lists', () => {
     expect(
       extensionLists({

@@ -11,6 +11,10 @@
  *   GET    /api/v1/bcf-sync/projects/:projectId/servers
  *          the servers to offer (set up by server admins, then ones used in
  *          the project) and the callback URL to register an OAuth client for
+ *   GET    /api/v1/bcf-sync/projects/:projectId/extensions?modelIds=a,b
+ *          the connected BCF servers' value lists for these models (users a
+ *          topic can be assigned to, types, statuses, ...), merged; readable
+ *          by anyone who can comment on the project
  *   GET    /api/v1/bcf-sync/projects/:projectId/sync-owners
  *          the models whose topics this server syncs itself, so that another
  *          sync of the same BCF project (one run by the BCF server's side)
@@ -49,6 +53,7 @@ import { BcfServerError } from '@/modules/bcfsync/clients/bcf/discovery'
 import {
   deleteBcfConnectionFactory,
   getBcfConnectionForTargetFactory,
+  getProjectBcfConnectionsWithProjectFactory,
   getProjectActiveBcfConnectionsFactory,
   getBcfConnectionByStateFactory,
   getBcfConnectionFactory,
@@ -68,6 +73,7 @@ import {
 } from '@/modules/bcfsync/services/connections'
 import type { BcfSyncDirection } from '@/modules/bcfsync/domain/types'
 import { bcfServerChoices } from '@/modules/bcfsync/services/servers'
+import { mergeExtensionLists } from '@/modules/bcfsync/services/extensions'
 import {
   getBcfServerByUrlFactory,
   listBcfServersFactory
@@ -195,6 +201,24 @@ export const getBcfSyncRouter = (): Router => {
         servers: bcfServerChoices(await listBcfServersFactory({ db })(), used),
         callbackUrl: bcfCallbackUrl(getServerOrigin())
       })
+    } catch (e) {
+      sendError(req, res, e)
+    }
+  })
+
+  router.get('/api/v1/bcf-sync/projects/:projectId/extensions', cors, async (req, res) => {
+    try {
+      const { projectId } = req.params
+      const ctx = await buildContext({ req })
+      throwIfAuthNotOk(
+        await ctx.authPolicies.project.comment.canCreate({ userId: ctx.userId, projectId })
+      )
+      await validateScopes(ctx.scopes, Scopes.Streams.Read)
+      const modelIds = (str(req.query.modelIds) || '').split(',').filter(Boolean)
+      const rows = (await getProjectBcfConnectionsWithProjectFactory({ db })(projectId)).filter(
+        (c) => c.status !== 'pending' && (!modelIds.length || modelIds.includes(c.modelId))
+      )
+      res.json(mergeExtensionLists(rows.map((c) => c.remoteExtensions)))
     } catch (e) {
       sendError(req, res, e)
     }

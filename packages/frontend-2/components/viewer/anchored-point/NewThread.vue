@@ -68,19 +68,19 @@
             <div v-if="showBcfDetails" class="flex flex-col gap-y-1 px-2 pb-1">
               <ViewerCommentsBcfPropertySelect
                 v-model="topicType"
-                :items="BCF_TOPIC_TYPES"
+                :items="bcfChoices(bcfLists.topic_type, BCF_TOPIC_TYPES, topicType)"
                 label="Type"
                 name="new-thread-topic-type"
               />
               <ViewerCommentsBcfPropertySelect
                 v-model="topicStatus"
-                :items="BCF_TOPIC_STATUSES"
+                :items="bcfChoices(bcfLists.topic_status, BCF_TOPIC_STATUSES, topicStatus)"
                 label="Status"
                 name="new-thread-topic-status"
               />
               <ViewerCommentsBcfPropertySelect
                 v-model="priority"
-                :items="BCF_PRIORITIES"
+                :items="bcfChoices(bcfLists.priority, BCF_PRIORITIES, priority)"
                 label="Priority"
                 name="new-thread-priority"
               />
@@ -117,7 +117,17 @@
                 :custom-icon="CalendarIcon"
                 @update:model-value="onDueDateInput"
               />
+              <ViewerCommentsBcfPropertySelect
+                v-if="bcfLists.users?.length"
+                :model-value="assignedTo"
+                :items="bcfChoices(bcfLists.users, [], assignedTo)"
+                label="Assigned to"
+                name="new-thread-assigned-to"
+                search
+                @update:model-value="(v) => (assignedTo = v)"
+              />
               <FormTextInput
+                v-else
                 :model-value="assignedTo ?? undefined"
                 name="new-thread-assigned-to"
                 label="Assigned to"
@@ -235,6 +245,10 @@ import {
   toBcfDueDateInput
 } from '~~/lib/viewer/helpers/bcf'
 import { useMixpanel } from '~~/lib/core/composables/mp'
+import {
+  bcfChoices,
+  useBcfServerValueLists
+} from '~~/lib/viewer/composables/bcfServerValues'
 import { ToastNotificationType, useGlobalToast } from '~~/lib/common/composables/toast'
 import { useThreadUtilities, useSelectionUtilities } from '~~/lib/viewer/composables/ui'
 import { useEmbed } from '~/lib/viewer/composables/setup/embed'
@@ -280,6 +294,8 @@ const threadContainer = ref(null as Nullable<HTMLElement>)
 const isPostingNewThread = ref(false)
 
 const showBcfDetails = ref(false)
+// Users, types, statuses ... of a BCF server the model syncs with, if any.
+const bcfLists = useBcfServerValueLists()
 const topicType = ref(null as Nullable<string>)
 const topicStatus = ref(null as Nullable<string>)
 const priority = ref(null as Nullable<string>)

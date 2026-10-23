@@ -323,14 +323,15 @@ export const runBcfSync = async (
           'This sync would delete more than half of the synced topics. Check a dry run, then sync manually allowing it.'
         )
 
-      // The server's allowed values; without them anything is sent as is.
+      // The server's allowed values (also kept for the viewer's choices);
+      // without them anything is sent as is.
       let extensions: BcfExtensionLists = {}
-      if (connection.direction !== 'pull') {
-        try {
-          extensions = extensionLists(await client.getExtensions(remoteProjectId))
-        } catch {
-          // optional in practice
-        }
+      let extensionsRead = false
+      try {
+        extensions = extensionLists(await client.getExtensions(remoteProjectId))
+        extensionsRead = true
+      } catch {
+        // optional in practice
       }
       const warnings: string[] = []
 
@@ -372,6 +373,7 @@ export const runBcfSync = async (
         lastError: result.failed.length
           ? `${result.failed.length} item(s) failed, e.g. ${result.failed[0].error}`
           : null,
+        ...(extensionsRead ? { remoteExtensions: extensions } : {}),
         lastSyncResult: {
           at: new Date().toISOString(),
           counts: report.counts,

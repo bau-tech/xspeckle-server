@@ -1,4 +1,5 @@
 import type { BcfServerInfo } from '@/modules/bcfsync/clients/bcf/discovery'
+import type { BcfExtensionLists } from '@/modules/bcfsync/services/extensions'
 import type { Nullable } from '@speckle/shared'
 
 export type BcfSyncDirection = 'two-way' | 'pull' | 'push'
@@ -36,6 +37,8 @@ export interface BcfServerConnectionRecord {
   pullCursor: Nullable<Date>
   /** Summary of the last run (see runner.ts). */
   lastSyncResult: Nullable<Record<string, unknown>>
+  /** The BCF server's value lists for the project (users, types, ...). */
+  remoteExtensions: Nullable<BcfExtensionLists>
   createdAt: Date
   updatedAt: Date
 }

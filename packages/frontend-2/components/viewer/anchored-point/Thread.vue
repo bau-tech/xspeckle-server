@@ -86,21 +86,21 @@
           <div class="grid grid-cols-2 gap-1 border-b border-outline-2 p-2">
             <ViewerCommentsBcfPropertySelect
               :model-value="topicType"
-              :items="BCF_TOPIC_TYPES"
+              :items="bcfChoices(bcfLists.topic_type, BCF_TOPIC_TYPES, topicType)"
               label="Type"
               name="thread-topic-type"
               @update:model-value="onTopicTypeChanged"
             />
             <ViewerCommentsBcfPropertySelect
               :model-value="topicStatus"
-              :items="BCF_TOPIC_STATUSES"
+              :items="bcfChoices(bcfLists.topic_status, BCF_TOPIC_STATUSES, topicStatus)"
               label="Status"
               name="thread-topic-status"
               @update:model-value="onTopicStatusChanged"
             />
             <ViewerCommentsBcfPropertySelect
               :model-value="priority"
-              :items="BCF_PRIORITIES"
+              :items="bcfChoices(bcfLists.priority, BCF_PRIORITIES, priority)"
               label="Priority"
               name="thread-priority"
               @update:model-value="onPriorityChanged"
@@ -183,7 +183,17 @@
                 :custom-icon="CalendarIcon"
                 @change="onDueDateChanged"
               />
+              <ViewerCommentsBcfPropertySelect
+                v-if="bcfLists.users?.length"
+                :model-value="assignedTo"
+                :items="bcfChoices(bcfLists.users, [], assignedTo)"
+                label="Assigned to"
+                name="thread-assigned-to"
+                search
+                @update:model-value="(v) => onBcfFieldChanged('assignedTo', v)"
+              />
               <FormTextInput
+                v-else
                 :model-value="assignedTo ?? undefined"
                 name="thread-assigned-to"
                 label="Assigned to"
@@ -388,6 +398,10 @@ import { ToastNotificationType, useGlobalToast } from '~~/lib/common/composables
 import { getLinkToThread } from '~~/lib/viewer/helpers/comments'
 import { useDisableGlobalTextSelection } from '~~/lib/common/composables/window'
 import { useMixpanel } from '~~/lib/core/composables/mp'
+import {
+  bcfChoices,
+  useBcfServerValueLists
+} from '~~/lib/viewer/composables/bcfServerValues'
 import { useThreadUtilities } from '~~/lib/viewer/composables/ui'
 import { useEmbed } from '~/lib/viewer/composables/setup/embed'
 import { graphql } from '~/lib/common/generated/gql'
@@ -483,6 +497,8 @@ const commentsContainer = ref(null as Nullable<HTMLElement>)
 const threadContainer = ref(null as Nullable<HTMLElement>)
 const threadActivator = ref(null as Nullable<HTMLElement>)
 
+// Users, types, statuses ... of a BCF server the model syncs with, if any.
+const bcfLists = useBcfServerValueLists()
 const topicType = ref(props.modelValue.topicType ?? null)
 const topicStatus = ref(props.modelValue.topicStatus ?? null)
 const priority = ref(props.modelValue.priority ?? null)

@@ -8,6 +8,30 @@ export type BcfExtensionLists = Partial<
   Record<'topic_type' | 'topic_status' | 'topic_label' | 'priority' | 'stage' | 'users', string[]>
 >
 
+const EXTENSION_KEYS = [
+  'topic_type',
+  'topic_status',
+  'topic_label',
+  'priority',
+  'stage',
+  'users'
+] as const
+
+/**
+ * Several connections' lists as one (a model can sync with more than one
+ * BCF project): every value once, in first-seen order.
+ */
+export const mergeExtensionLists = (
+  lists: Array<BcfExtensionLists | null | undefined>
+): BcfExtensionLists => {
+  const out: BcfExtensionLists = {}
+  for (const key of EXTENSION_KEYS) {
+    const values = [...new Set(lists.flatMap((l) => l?.[key] || []))]
+    if (values.length) out[key] = values
+  }
+  return out
+}
+
 export const extensionLists = (extensions: Record<string, unknown>): BcfExtensionLists => {
   const out: BcfExtensionLists = {}
   for (const key of ['topic_type', 'topic_status', 'topic_label', 'priority', 'stage', 'users'] as const) {

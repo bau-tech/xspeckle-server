@@ -24,6 +24,7 @@ import type {
   updateBcfConnectionFactory
 } from '@/modules/bcfsync/repositories/connections'
 import { decryptSecret, encryptSecret } from '@/modules/bcfsync/services/secrets'
+import { extensionLists, type BcfExtensionLists } from '@/modules/bcfsync/services/extensions'
 import { BadRequestError, NotFoundError } from '@/modules/shared/errors'
 
 /** How long a user has to finish signing in at the BCF server. */
@@ -299,6 +300,13 @@ export const selectBcfRemoteProjectFactory =
         throw new BadRequestError('That BCF project does not exist or is not accessible')
       throw e
     }
+    // The project's value lists, so the viewer offers them before the first sync.
+    let remoteExtensions: BcfExtensionLists | undefined
+    try {
+      remoteExtensions = extensionLists(await client.getExtensions(args.remoteProjectId))
+    } catch {
+      // the next sync reads them again
+    }
     const c = args.connection
     const existing = await deps.findConnectionForTarget({
       modelId: c.modelId,
@@ -314,7 +322,8 @@ export const selectBcfRemoteProjectFactory =
         accessTokenExpiresAt: c.accessTokenExpiresAt,
         // a sign-in that had expired works again
         status: existing.status === 'error' ? 'active' : existing.status,
-        lastError: null
+        lastError: null,
+        ...(remoteExtensions ? { remoteExtensions } : {})
       })
       await deps.deleteConnection(c.id)
       return merged!
@@ -325,6 +334,7 @@ export const selectBcfRemoteProjectFactory =
       direction: args.direction || args.connection.direction,
       // Not syncing yet: the user looks at a dry run, then activates.
       status: args.connection.status === 'active' ? 'active' : 'authorized',
-      lastError: null
+      lastError: null,
+      ...(remoteExtensions ? { remoteExtensions } : {})
     }))!
   }
