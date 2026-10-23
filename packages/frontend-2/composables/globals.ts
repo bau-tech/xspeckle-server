@@ -11,6 +11,14 @@ export const useIsAccModuleEnabled = () => {
   return ref(FF_ACC_INTEGRATION_ENABLED)
 }
 
+export const useIsBcfSyncEnabled = () => {
+  const {
+    public: { FF_BCF_SYNC_ENABLED }
+  } = useRuntimeConfig()
+
+  return ref(FF_BCF_SYNC_ENABLED)
+}
+
 export const useIsAutomateModuleEnabled = () => {
   const {
     public: { FF_AUTOMATE_MODULE_ENABLED }

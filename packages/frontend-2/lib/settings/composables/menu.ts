@@ -36,6 +36,7 @@ export const useSettingsMenu = () => {
   const isAutomateEnabled = useIsAutomateModuleEnabled()
   const isMultipleEmailsEnabled = useIsMultipleEmailsEnabled().value
   const isMultiRegionEnabled = useIsMultiregionEnabled()
+  const isBcfSyncEnabled = useIsBcfSyncEnabled().value
 
   const workspaceMenuItems = shallowRef<WorkspaceSettingsMenuItem[]>([
     {
@@ -141,6 +142,14 @@ export const useSettingsMenu = () => {
           {
             title: 'Regions',
             route: settingsServerRoutes.regions
+          }
+        ]
+      : []),
+    ...(isBcfSyncEnabled
+      ? [
+          {
+            title: 'BCF servers',
+            route: settingsServerRoutes.bcfServers
           }
         ]
       : [])

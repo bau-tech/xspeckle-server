@@ -19,6 +19,7 @@ services:
       NUXT_PUBLIC_BASE_URL: "${SPECKLE_URL:?Set SPECKLE_URL}"
       NUXT_PUBLIC_FF_NEXT_GEN_FILE_IMPORTER_ENABLED: "false"
       NUXT_PUBLIC_FF_LEGACY_FILE_IMPORTS_ENABLED: "true"
+      NUXT_PUBLIC_FF_BCF_SYNC_ENABLED: "true"
 
   speckle-server:
     environment:
@@ -31,6 +32,7 @@ services:
       S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}"
       FF_NEXT_GEN_FILE_IMPORTER_ENABLED: "false"
       FF_LEGACY_FILE_IMPORTS_ENABLED: "true"
+      FF_BCF_SYNC_ENABLED: "true"
 
   webhook-service:
     environment:

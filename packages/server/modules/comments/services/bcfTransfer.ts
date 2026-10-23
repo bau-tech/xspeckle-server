@@ -75,7 +75,7 @@ const componentInput = (c: BcfComponent) => ({
 })
 
 /** Archive viewpoint -> the GraphQL ViewpointInput the create services take. */
-const viewpointInput = (vp: BcfArchiveViewpoint, guid: string): ViewpointInput => {
+export const viewpointInput = (vp: BcfArchiveViewpoint, guid: string): ViewpointInput => {
   // Components are stored exactly as the file has them: the external BCF server's sync
   // copies stored viewpoints as-is, so anything rewritten here would surface
   // there as different data under the same viewpoint guid.
@@ -121,7 +121,7 @@ const viewpointInput = (vp: BcfArchiveViewpoint, guid: string): ViewpointInput =
   }
 }
 
-const snapshotDataUri = (vp: BcfArchiveViewpoint) =>
+export const snapshotDataUri = (vp: BcfArchiveViewpoint) =>
   vp.snapshot
     ? `data:image/${vp.snapshot.type === 'jpg' ? 'jpeg' : 'png'};base64,${Buffer.from(
         vp.snapshot.data

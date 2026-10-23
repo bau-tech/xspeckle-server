@@ -98,6 +98,7 @@ const getEnabledModuleNames = () => {
     'apiexplorer',
     'auth',
     'backgroundjobs',
+    'bcfsync',
     'blobstorage',
     'comments',
     'core',

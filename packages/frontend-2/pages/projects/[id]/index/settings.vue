@@ -15,7 +15,8 @@ import {
   projectSettingsRoute,
   projectWebhooksRoute,
   projectTokensRoute,
-  projectIntegrationsRoute
+  projectIntegrationsRoute,
+  projectBcfServersRoute
 } from '~~/lib/common/helpers/route'
 import { graphql } from '~~/lib/common/generated/gql'
 import type { ProjectPageSettingsTab_ProjectFragment } from '~~/lib/common/generated/gql/graphql'
@@ -54,6 +55,7 @@ const projectName = computed(() =>
   attrs.project.name.length ? attrs.project.name : ''
 )
 const isAccEnabled = useIsAccModuleEnabled() // check permission over project
+const isBcfSyncEnabled = useIsBcfSyncEnabled()
 const canReadAccIntegrationSettings = computed(
   () => attrs.project.permissions.canReadAccIntegrationSettings
 )
@@ -84,7 +86,15 @@ const settingsTabItems = computed((): LayoutPageTabItem[] => [
     id: 'integrations',
     disabled: isAccEnabled && !canReadAccIntegrationSettings.value.authorized,
     disabledMessage: canReadAccIntegrationSettings.value.message
-  }
+  },
+  ...(isBcfSyncEnabled.value
+    ? [
+        {
+          title: 'BCF servers',
+          id: 'bcf-servers'
+        }
+      ]
+    : [])
 ])
 
 const projectId = computed(() => route.params.id as string)
@@ -95,6 +105,7 @@ const activeSettingsPageTab = computed({
     if (path.includes('/settings/webhooks')) return settingsTabItems.value[1]
     if (path.includes('/settings/tokens')) return settingsTabItems.value[2]
     if (path.includes('/settings/integrations')) return settingsTabItems.value[3]
+    if (path.includes('/settings/bcf-servers')) return settingsTabItems.value[4]
     return settingsTabItems.value[0]
   },
   set: (val: LayoutPageTabItem) => {
@@ -107,6 +118,9 @@ const activeSettingsPageTab = computed({
         break
       case 'integrations':
         router.push(projectIntegrationsRoute(projectId.value))
+        break
+      case 'bcf-servers':
+        router.push(projectBcfServersRoute(projectId.value))
         break
       case 'general':
       default:

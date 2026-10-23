@@ -36,7 +36,8 @@ export const settingsServerRoutes = {
   general: '/settings/server/general',
   projects: '/settings/server/projects',
   members: '/settings/server/members',
-  regions: '/settings/server/regions'
+  regions: '/settings/server/regions',
+  bcfServers: '/settings/server/bcf-servers'
 }
 
 export const settingsWorkspaceRoutes = {
@@ -148,6 +149,9 @@ export const projectTokensRoute = (projectId: string) =>
 
 export const projectIntegrationsRoute = (projectId: string) =>
   `/projects/${projectId}/settings/integrations`
+
+export const projectBcfServersRoute = (projectId: string) =>
+  `/projects/${projectId}/settings/bcf-servers`
 
 export const threadRedirectRoute = (projectId: string, threadId: string) =>
   `/projects/${projectId}/threads/${threadId}`

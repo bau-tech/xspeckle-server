@@ -135,6 +135,12 @@ export const parseFeatureFlags = (
         'Enables the integration with ACC. This synchronizes models with specified ACC assets.',
       defaults: { _: false }
     },
+    FF_BCF_SYNC_ENABLED: {
+      schema: z.boolean(),
+      description:
+        'Enables syncing the BCF topics of a model with external BCF API 3.0 servers.',
+      defaults: { _: false }
+    },
     FF_DASHBOARDS_MODULE_ENABLED: {
       schema: z.boolean(),
       description: 'Enables the dashboards module.',
