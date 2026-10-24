@@ -4,7 +4,7 @@ import {
   useInjectedViewerState
 } from '~~/lib/viewer/composables/setup'
 
-/** A BCF server's value lists for a project (BCF 3.0 project extensions). */
+/** A BCF server's value lists for a project (BCF project extensions). */
 export type BcfServerValueLists = Partial<
   Record<'topic_type' | 'topic_status' | 'topic_label' | 'priority' | 'stage' | 'users', string[]>
 >

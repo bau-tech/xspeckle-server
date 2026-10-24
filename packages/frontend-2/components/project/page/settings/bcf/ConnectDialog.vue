@@ -63,7 +63,7 @@
         name="bcfServerUrl"
         :label="serverItems.length > 1 ? 'Server address' : 'BCF server'"
         placeholder="https://bcf.example.com"
-        help="Any server with the BCF API 3.0 and OAuth2 sign-in."
+        help="Any server with the BCF API 3.0 or 2.1 and OAuth2 sign-in."
         show-label
         color="foundation"
         :rules="[isRequired, isUrl]"

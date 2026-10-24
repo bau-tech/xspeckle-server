@@ -64,7 +64,7 @@ export interface BcfServerInput {
 }
 
 /**
- * Checks an admin's input: the address must be a BCF API 3.0 server with
+ * Checks an admin's input: the address must be a BCF API 3.0 or 2.1 server with
  * OAuth2 sign-in, and without automatic client registration it needs a
  * registered client. Returns the normalised URL.
  */

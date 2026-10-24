@@ -1,12 +1,14 @@
 /**
  * Finds out how to talk to an external BCF server from nothing but its base
- * URL, using only what the BCF API 3.0 / OAuth2 specs define:
+ * URL, using only what the BCF API / OAuth2 specs define:
  *
- *   GET {base}/bcf/versions        -> where the BCF 3.0 API lives
- *   GET {api}/auth                 -> OAuth2 endpoints (BCF 3.0 §2.1)
+ *   GET {base}/bcf/versions        -> which BCF API versions it offers, and where
+ *   GET {api}/auth                 -> OAuth2 endpoints
  *   GET {base}/.well-known/oauth-authorization-server  (RFC 8414, optional)
+ *   GET {issuer}/.well-known/openid-configuration      (OpenID discovery, optional)
  *
- * No server-specific endpoint is used, so any BCF 3.0 server works.
+ * BCF 3.0 is used when offered, else BCF 2.1; both share the endpoints and
+ * wire shapes the sync uses. No server-specific endpoint is used.
  */
 
 export class BcfServerError extends Error {
@@ -19,11 +21,15 @@ export class BcfServerError extends Error {
   }
 }
 
+export type BcfApiVersion = '3.0' | '2.1'
+
 export interface BcfServerInfo {
   /** Normalised base URL the user entered (no trailing slash). */
   baseUrl: string
-  /** BCF 3.0 API root, with a trailing slash (e.g. https://host/bcf/3.0/). */
+  /** BCF API root, with a trailing slash (e.g. https://host/bcf/3.0/). */
   apiBaseUrl: string
+  /** Missing on connections saved before BCF 2.1 support, which are all 3.0. */
+  apiVersion?: BcfApiVersion
   authUrl: string
   tokenUrl: string
   /** RFC 7591 dynamic client registration, when the server offers it. */
@@ -92,6 +98,55 @@ export const getJson = async (
 
 const withSlash = (u: string) => (u.endsWith('/') ? u : `${u}/`)
 
+const SUPPORTED_VERSIONS: BcfApiVersion[] = ['3.0', '2.1']
+
+/**
+ * The newest BCF API version the server offers. `api_id` and `api_base_url`
+ * are BCF 3.0 additions: a 2.1 server lists bare `version_id`s, and its API
+ * lives at {base}/bcf/{version}/.
+ */
+const pickVersion = (baseUrl: string, versions: unknown) => {
+  const list = isRecord(versions) && Array.isArray(versions.versions) ? versions.versions : []
+  for (const version of SUPPORTED_VERSIONS) {
+    const entry = list.find(
+      (v) =>
+        isRecord(v) &&
+        v.version_id === version &&
+        (v.api_id === undefined || v.api_id === 'bcf')
+    )
+    if (!isRecord(entry)) continue
+    const apiBaseUrl =
+      typeof entry.api_base_url === 'string' && entry.api_base_url
+        ? entry.api_base_url
+        : `${baseUrl}/bcf/${version}`
+    return { version, apiBaseUrl: withSlash(apiBaseUrl) }
+  }
+  throw new BcfServerError('The server offers neither the BCF API 3.0 nor 2.1')
+}
+
+/**
+ * Where the authorization server may publish its metadata: RFC 8414 at the
+ * base URL, else OpenID discovery at the authorize endpoint's parent paths
+ * (e.g. an identity server at {host}/identity).
+ */
+const metadataUrls = (baseUrl: string, authUrl: string) => {
+  const urls = [`${baseUrl}/.well-known/oauth-authorization-server`]
+  try {
+    const u = new URL(authUrl)
+    const parts = u.pathname.split('/').filter(Boolean).slice(0, -1)
+    for (let i = parts.length; i >= 0; i--) {
+      const issuer = `${u.origin}${parts
+        .slice(0, i)
+        .map((p) => `/${p}`)
+        .join('')}`
+      urls.push(`${issuer}/.well-known/openid-configuration`)
+    }
+  } catch {
+    // no OpenID candidates
+  }
+  return [...new Set(urls)]
+}
+
 export const discoverBcfServer = async (
   inputUrl: string,
   fetchFn: typeof fetch = fetch
@@ -99,13 +154,7 @@ export const discoverBcfServer = async (
   const baseUrl = normaliseBaseUrl(inputUrl)
 
   const versions = await getJson(`${baseUrl}/bcf/versions`, undefined, fetchFn)
-  const list = isRecord(versions) && Array.isArray(versions.versions) ? versions.versions : []
-  const bcf3 = list.find(
-    (v) => isRecord(v) && v.api_id === 'bcf' && v.version_id === '3.0'
-  )
-  if (!isRecord(bcf3) || typeof bcf3.api_base_url !== 'string')
-    throw new BcfServerError('The server does not offer the BCF API 3.0')
-  const apiBaseUrl = withSlash(bcf3.api_base_url)
+  const { version: apiVersion, apiBaseUrl } = pickVersion(baseUrl, versions)
 
   const auth = await getJson(`${apiBaseUrl}auth`, undefined, fetchFn)
   if (!isRecord(auth)) throw new BcfServerError('The server returned no auth information')
@@ -124,27 +173,31 @@ export const discoverBcfServer = async (
   let tokenAuthMethods: string[] = []
   let scopes: string[] = []
   let supportsPkce = false
-  // RFC 8414 metadata is optional: a server without it still works.
-  try {
-    const meta = await getJson(
-      `${baseUrl}/.well-known/oauth-authorization-server`,
-      undefined,
-      fetchFn
-    )
-    if (isRecord(meta)) {
-      tokenAuthMethods = stringArray(meta.token_endpoint_auth_methods_supported)
-      scopes = stringArray(meta.scopes_supported)
-      supportsPkce = stringArray(meta.code_challenge_methods_supported).includes('S256')
-      if (!registrationUrl && typeof meta.registration_endpoint === 'string')
-        registrationUrl = meta.registration_endpoint
+  // Metadata is optional: a server without it still works. The first document
+  // found wins; one guessed from the authorize endpoint's path only when it
+  // is for that endpoint.
+  const [rfc8414Url, ...openIdUrls] = metadataUrls(baseUrl, authUrl)
+  for (const url of [rfc8414Url, ...openIdUrls]) {
+    let meta: unknown
+    try {
+      meta = await getJson(url, undefined, fetchFn)
+    } catch {
+      continue
     }
-  } catch {
-    // ignore
+    if (!isRecord(meta)) continue
+    if (url !== rfc8414Url && meta.authorization_endpoint !== authUrl) continue
+    tokenAuthMethods = stringArray(meta.token_endpoint_auth_methods_supported)
+    scopes = stringArray(meta.scopes_supported)
+    supportsPkce = stringArray(meta.code_challenge_methods_supported).includes('S256')
+    if (!registrationUrl && typeof meta.registration_endpoint === 'string')
+      registrationUrl = meta.registration_endpoint
+    break
   }
 
   return {
     baseUrl,
     apiBaseUrl,
+    apiVersion,
     authUrl,
     tokenUrl,
     registrationUrl,

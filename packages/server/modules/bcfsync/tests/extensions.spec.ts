@@ -56,6 +56,13 @@ describe('BCF sync extensions', () => {
     ).to.deep.equal({ topic_status: ['Open', 'Closed'], users: ['a@x.y'] })
   })
 
+  it('reads the BCF 2.1 user list (user_id_type)', () => {
+    expect(extensionLists({ user_id_type: ['a@x.y'] })).to.deep.equal({ users: ['a@x.y'] })
+    expect(extensionLists({ users: ['b@x.y'], user_id_type: ['a@x.y'] })).to.deep.equal({
+      users: ['b@x.y']
+    })
+  })
+
   it('sends everything as is when the server has no lists', () => {
     const t = topic()
     const warnings: string[] = []

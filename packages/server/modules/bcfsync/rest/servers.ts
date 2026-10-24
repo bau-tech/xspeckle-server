@@ -7,7 +7,7 @@
  *                                          '' = removed
  *   DELETE /api/v1/bcf-sync/servers/:id
  *
- * Saving checks that the address is a BCF API 3.0 server. Existing
+ * Saving checks that the address is a BCF API 3.0 or 2.1 server. Existing
  * connections are not affected by changes here.
  */
 import type { Request, Response, Router } from 'express'

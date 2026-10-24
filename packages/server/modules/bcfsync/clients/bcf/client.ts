@@ -11,13 +11,13 @@ export interface BcfRemoteUser {
   name?: string
 }
 
-/** Wire shapes as the BCF API 3.0 serves them; every field may be missing. */
+/** Wire shapes as the BCF API 3.0 / 2.1 serves them; every field may be missing. */
 export type BcfWireTopic = Record<string, unknown> & { guid: string }
 export type BcfWireComment = Record<string, unknown> & { guid: string }
 export type BcfWireViewpoint = Record<string, unknown> & { guid: string }
 
 export interface BcfClientOptions {
-  /** BCF 3.0 API root with trailing slash. */
+  /** BCF API root with trailing slash. */
   apiBaseUrl: string
   /** Current access token; called again after a 401 with `forceRefresh`. */
   getAccessToken: (forceRefresh: boolean) => Promise<string>
@@ -42,7 +42,7 @@ const withGuid = <T>(rows: unknown): Array<T & { guid: string }> =>
 type Query = Record<string, string | number | undefined>
 
 /**
- * Thin BCF API 3.0 client: auth header, one token refresh on 401, one wait on
+ * Thin BCF API 3.0 / 2.1 client: auth header, one token refresh on 401, one wait on
  * 429, and OData paging helpers. It returns the raw wire shapes (snake_case);
  * mapping them to Speckle topics happens in the sync services.
  */
@@ -214,7 +214,7 @@ export class BcfClient {
   }
 
   /**
-   * A viewpoint's components. BCF 3.0 serves them as sub-resources, not in
+   * A viewpoint's components. BCF 3.0 and 2.1 serve them as sub-resources, not in
    * the viewpoint itself; a missing one (404) counts as empty.
    */
   async getViewpointComponents(projectId: string, topicGuid: string, viewpointGuid: string) {
@@ -349,7 +349,7 @@ export class BcfClient {
     return status !== 404
   }
 
-  /** BCF 3.0: replaces the whole collection. */
+  /** Replaces the whole collection (BCF 3.0 and 2.1). */
   async putRelatedTopics(projectId: string, topicGuid: string, guids: string[]) {
     await this.request('PUT', `${this.topic(projectId, topicGuid)}/related_topics`, {
       body: guids.map((g) => ({ related_topic_guid: g }))

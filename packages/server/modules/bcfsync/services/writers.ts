@@ -330,7 +330,7 @@ export const remoteWriterFactory = (deps: {
       })
       const ok = typeof resp?.guid === 'string'
       return {
-        // BCF 3.0 has the server assign comment guids.
+        // The BCF server assigns comment guids.
         guid: (ok ? resp.guid : c.guid).toLowerCase(),
         state: ok ? commentState(archiveComment(resp)) : c.state
       }

@@ -62,7 +62,7 @@ const component = (v: unknown) => {
   }
 }
 
-/** BCF 3.0 components from a viewpoint, filling what the server left out. */
+/** BCF components from a viewpoint, filling what the server left out. */
 export const viewpointData = (
   vp: BcfWireViewpoint,
   parts?: { selection?: unknown; coloring?: unknown; visibility?: unknown }

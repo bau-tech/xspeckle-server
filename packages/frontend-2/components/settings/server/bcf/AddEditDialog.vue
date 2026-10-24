@@ -21,7 +21,7 @@
         name="bcfServerUrl"
         label="Address"
         placeholder="https://bcf.example.com"
-        help="A server with the BCF API 3.0 and OAuth2 sign-in. It is checked when saving."
+        help="A server with the BCF API 3.0 or 2.1 and OAuth2 sign-in. It is checked when saving."
         show-label
         color="foundation"
         :rules="[isRequired, isUrl]"

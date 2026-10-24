@@ -92,6 +92,73 @@ describe('BCF sync client', () => {
       expect(info.scopes).to.deep.equal([])
     })
 
+    it('falls back to BCF 2.1 and finds OpenID metadata under the issuer path', async () => {
+      // shaped like a BCF 2.1 server with an identity server at /identity
+      const { fetchFn, calls } = fakeServer({
+        [`GET ${base}/bcf/versions`]: () =>
+          json({
+            versions: [
+              { version_id: '2.1', detailed_version: 'https://github.com/BuildingSMART/BCF-API' },
+              { version_id: 'x_2.1', detailed_version: 'https://vendor.test/' }
+            ]
+          }),
+        [`GET ${base}/bcf/2.1/auth`]: () =>
+          json({
+            oauth2_auth_url: `${base}/identity/connect/authorize`,
+            oauth2_token_url: `${base}/identity/connect/token`,
+            http_basic_supported: false,
+            supported_oauth2_flows: [
+              'authorization_code_grant',
+              'resource_owner_password_credentials_grant'
+            ]
+          }),
+        [`GET ${base}/identity/.well-known/openid-configuration`]: () =>
+          json({
+            issuer: `${base}/identity`,
+            authorization_endpoint: `${base}/identity/connect/authorize`,
+            token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+            scopes_supported: ['openid', 'profile', 'bcf', 'offline_access'],
+            code_challenge_methods_supported: ['plain', 'S256']
+          })
+      })
+      const info = await discoverBcfServer(base, fetchFn)
+      expect(info).to.deep.include({
+        apiBaseUrl: `${base}/bcf/2.1/`,
+        apiVersion: '2.1',
+        authUrl: `${base}/identity/connect/authorize`,
+        registrationUrl: null,
+        supportsPkce: true
+      })
+      expect(info.scopes).to.include.members(['bcf', 'offline_access'])
+      expect(calls.map((c) => new URL(c.url).pathname)).to.deep.equal([
+        '/bcf/versions',
+        '/bcf/2.1/auth',
+        '/.well-known/oauth-authorization-server',
+        '/identity/connect/.well-known/openid-configuration',
+        '/identity/.well-known/openid-configuration'
+      ])
+    })
+
+    it('prefers BCF 3.0', async () => {
+      const info = await discoverBcfServer(base, fakeServer(discoveryRoutes).fetchFn)
+      expect(info.apiVersion).to.equal('3.0')
+    })
+
+    it('ignores OpenID metadata for another authorize endpoint', async () => {
+      const routes = { ...discoveryRoutes }
+      delete routes[`GET ${base}/.well-known/oauth-authorization-server`]
+      const { fetchFn } = fakeServer({
+        ...routes,
+        [`GET ${base}/.well-known/openid-configuration`]: () =>
+          json({
+            authorization_endpoint: 'https://elsewhere.test/authorize',
+            scopes_supported: ['other']
+          })
+      })
+      const info = await discoverBcfServer(base, fetchFn)
+      expect(info.scopes).to.deep.equal([])
+    })
+
     it('rejects a server without BCF 3.0', async () => {
       const { fetchFn } = fakeServer({
         [`GET ${base}/bcf/versions`]: () => json({ versions: [] })

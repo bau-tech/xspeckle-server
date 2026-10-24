@@ -35,7 +35,8 @@ export const mergeExtensionLists = (
 export const extensionLists = (extensions: Record<string, unknown>): BcfExtensionLists => {
   const out: BcfExtensionLists = {}
   for (const key of ['topic_type', 'topic_status', 'topic_label', 'priority', 'stage', 'users'] as const) {
-    const v = extensions[key]
+    // BCF 2.1 calls the user list `user_id_type`.
+    const v = key === 'users' && !extensions.users ? extensions.user_id_type : extensions[key]
     if (Array.isArray(v)) {
       const values = v.filter((x): x is string => typeof x === 'string' && x !== '')
       if (values.length) out[key] = values

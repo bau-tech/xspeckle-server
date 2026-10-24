@@ -2,7 +2,7 @@ import { toValue, type MaybeRefOrGetter } from 'vue'
 import { useAuthCookie } from '~~/lib/auth/composables/auth'
 
 /**
- * Connections of a project's models to external BCF API 3.0 servers -- see
+ * Connections of a project's models to external BCF API 3.0 / 2.1 servers -- see
  * the server's modules/bcfsync/rest/connections.ts.
  */
 

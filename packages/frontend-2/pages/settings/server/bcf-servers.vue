@@ -3,7 +3,7 @@
     <div class="md:max-w-5xl md:mx-auto pb-6 md:pb-0">
       <SettingsSectionHeader
         title="BCF servers"
-        text="The BCF servers offered when connecting a model under project settings. Project owners can still connect to any other BCF API 3.0 server by its address."
+        text="The BCF servers offered when connecting a model under project settings. Project owners can still connect to any other BCF API 3.0 or 2.1 server by its address."
       />
       <div class="flex flex-col space-y-6">
         <div class="flex flex-row-reverse">

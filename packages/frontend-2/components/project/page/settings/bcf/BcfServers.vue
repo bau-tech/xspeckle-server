@@ -3,7 +3,7 @@
     <template #introduction>
       <p class="text-body-xs text-foreground">
         Keep the BCF topics of a model in sync with a project on a BCF server, any
-        server with the BCF API 3.0 and OAuth2 sign-in. Topics, comments and viewpoints
+        server with the BCF API 3.0 or 2.1 and OAuth2 sign-in. Topics, comments and viewpoints
         are synced; changes made on either side are carried over.
       </p>
     </template>

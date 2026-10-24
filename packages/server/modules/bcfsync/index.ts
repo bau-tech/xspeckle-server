@@ -17,7 +17,7 @@ const { FF_BCF_SYNC_ENABLED } = getFeatureFlags()
 let scheduledTask: ReturnType<ScheduleExecution> | null = null
 
 /**
- * Sync of a model's BCF topics with any external BCF API 3.0 server.
+ * Sync of a model's BCF topics with any external BCF API 3.0 or 2.1 server.
  * Connections (discovery, OAuth sign-in, remote project choice) and a
  * scheduled two-way sync of active connections.
  */
